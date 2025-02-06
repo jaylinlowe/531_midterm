@@ -1,0 +1,40 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(stringr)
+library(dplyr)
+library(ggplot2)
+```
+
+
+```{r}
+library(babynames)
+head(babynames)
+```
+
+# AVERAGE LENGTH OF NAMES 
+```{r}
+length_df <- babynames %>%
+  mutate(name_length = str_length(name)) %>%
+  group_by(year, sex) %>%
+  summarize(avg_length = mean(name_length)) 
+
+ggplot(length_df, aes(x = year, y = avg_length, color = sex)) + geom_line()
+```
+
+
+# AVERAGE NUMBER OF VOWELS
+```{r}
+vowel_df <- babynames %>%
+  mutate(num_vowels = str_count(name, '[aeoiuAEOIU]')) %>%
+  group_by(year, sex) %>%
+  summarize(avg_num = mean(num_vowels)) 
+
+ggplot(vowel_df, aes(x = year, y = avg_num, color = sex)) + geom_line()
+```
+
