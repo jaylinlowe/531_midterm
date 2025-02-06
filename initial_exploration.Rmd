@@ -26,6 +26,18 @@ length_df <- babynames %>%
 
 ggplot(length_df, aes(x = year, y = avg_length, color = sex)) + geom_line()
 ```
+This is the average length of a name, out of all names given. However, it doesn't take into consideration how many people were given a name. 
+
+If we instead want the average length of someone's name, out of all people, it's this: 
+```{r}
+length_df2 <- babynames %>%
+  mutate(name_length = str_length(name)) %>%
+  mutate(name_length_people = name_length * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_length = sum(name_length_people)/sum(n)) 
+
+ggplot(length_df2, aes(x = year, y = avg_length, color = sex)) + geom_line()
+```
 
 
 # AVERAGE NUMBER OF VOWELS
@@ -37,4 +49,40 @@ vowel_df <- babynames %>%
 
 ggplot(vowel_df, aes(x = year, y = avg_num, color = sex)) + geom_line()
 ```
+
+Same thing as before! This is out of all names. If we instead we want it to be out of all people, we want:
+```{r}
+vowel_df2 <- babynames %>%
+  mutate(num_vowels = str_count(name, '[aeoiuAEOIU]')) %>%
+  mutate(num_vowels_people = num_vowels * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_num = sum(num_vowels_people)/sum(n)) 
+
+ggplot(vowel_df2, aes(x = year, y = avg_num, color = sex)) + geom_line()
+```
+
+
+
+
+
+
+# ALTERNATIVE IDEAS 
+
+## Average number of "rare" letters 
+```{r}
+char_list <- strsplit(tolower(paste(babynames$name, collapse = "")), NULL)[[1]]
+letter_count <- table(char_list)
+```
+The five least common letters in names are x, q, w, p, and f. 
+
+```{r}
+rare_df <- babynames %>%
+  mutate(num_rare = str_count(name, '[xqwpfXQWPF]')) %>%
+  group_by(year, sex) %>%
+  summarize(avg_num = mean(num_rare)) 
+
+ggplot(rare_df, aes(x = year, y = avg_num, color = sex)) + geom_line()
+```
+
+
 
