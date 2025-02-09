@@ -1,0 +1,134 @@
+---
+title: "ARIMA Analysis of Baby Average Max Consonant"
+output: html_document
+date: "2025-02-09"
+---
+
+```{r setup}
+library(stringr)
+library(dplyr)
+library(babynames)
+library(tseries)
+library(forecast)
+```
+
+## 1. Construct Weighted Average Consonant Run Data
+```{r}
+longest_run <- rep(NA, nrow(babynames))
+for (i in 1:nrow(babynames)) {
+  name <- babynames$name[i]
+  longest_run[i] <- max(sapply(str_split(name, "[aeiouAEIOU]+")[[1]], nchar))
+}
+
+consonant_run_df <- babynames %>%
+  mutate(longest_run = longest_run) %>%
+  group_by(year, sex) %>%
+  summarize(weighted_longest_run = sum(n * longest_run)/sum(n), .groups = "drop")
+```
+
+## 2. Create Time Series for Males and Females (Frequency = 1, Yearly)
+```{r}
+male_ts <- ts(
+  consonant_run_df %>% filter(sex == "M") %>% arrange(year) %>% pull(weighted_longest_run),
+  start = min(consonant_run_df$year),
+  frequency = 1
+)
+female_ts <- ts(
+  consonant_run_df %>% filter(sex == "F") %>% arrange(year) %>% pull(weighted_longest_run),
+  start = min(consonant_run_df$year),
+  frequency = 1
+)
+```
+
+## 3. Perform ADF Unit Root Test and Plot Original Series
+```{r}
+cat("Original Male Series ADF Test Result:\n")
+adf_male_original <- adf.test(male_ts)
+print(adf_male_original)
+
+cat("\nOriginal Female Series ADF Test Result:\n")
+adf_female_original <- adf.test(female_ts)
+print(adf_female_original)
+```
+
+```{r}
+par(mfrow = c(1,1))
+plot(male_ts, type = "l", col = "mediumaquamarine",
+     xlab = "Year", ylab = "Average Max Consonant Run",
+     main = "Original Male and Female Series",
+     xlim = range(time(male_ts), time(female_ts)),
+     ylim = range(c(male_ts, female_ts)))
+lines(female_ts, col = "purple2")
+legend("topright", legend = c("Male", "Female"), col = c("mediumaquamarine", "purple2"), lty = 1)
+```
+
+## 4. Define Automatic Differencing Function
+```{r}
+auto_diff_adf <- function(ts_data, alpha = 0.05, max_diff = 3) {
+  d <- 0
+  ts_current <- ts_data
+  adf_result <- adf.test(ts_current)
+  while (adf_result$p.value > alpha && d < max_diff) {
+    d <- d + 1
+    ts_current <- diff(ts_current)
+    adf_result <- adf.test(ts_current)
+  }
+  return(list(differencing = d, ts_final = ts_current, adf_result = adf_result))
+}
+```
+
+## 5. Automatically Determine Differencing for Male and Female Series
+```{r}
+male_auto <- auto_diff_adf(male_ts)
+female_auto <- auto_diff_adf(female_ts)
+
+cat("\nMale Series: Differencing Order =", male_auto$differencing, "\n")
+print(male_auto$adf_result)
+
+cat("\nFemale Series: Differencing Order =", female_auto$differencing, "\n")
+print(female_auto$adf_result)
+```
+
+```{r}
+par(mfrow = c(1,1))
+plot(male_auto$ts_final, type = "l", col = "mediumaquamarine",
+     xlab = "Year", ylab = "Differenced Average Max Consonant",
+     main = "Differenced Male and Female Consonant Series",
+     xlim = range(time(male_auto$ts_final), time(female_auto$ts_final)),
+     ylim = range(c(male_auto$ts_final, female_auto$ts_final)))
+lines(female_auto$ts_final, col = "purple2")
+legend("topright", 
+       legend = c(paste("Male (Diff Order =", male_auto$differencing, ")"),
+                  paste("Female (Diff Order =", female_auto$differencing, ")")),
+       col = c("mediumaquamarine", "purple2"), lty = 1)
+```
+
+## 6. Plot ACF and PACF to Determine Model Structure
+```{r}
+par(mfrow = c(2,2))
+Acf(male_auto$ts_final, main = paste("ACF - Male (Diff Order =", male_auto$differencing, ")"))
+Pacf(male_auto$ts_final, main = paste("PACF - Male (Diff Order =", male_auto$differencing, ")"))
+Acf(female_auto$ts_final, main = paste("ACF - Female (Diff Order =", female_auto$differencing, ")"))
+Pacf(female_auto$ts_final, main = paste("PACF - Female (Diff Order =", female_auto$differencing, ")"))
+```
+
+## 7. Fit ARIMA Models Using `auto.arima`
+```{r}
+male_model <- auto.arima(male_ts)
+female_model <- auto.arima(female_ts)
+
+cat("\nMale ARIMA Model:\n")
+print(summary(male_model))
+cat("\nFemale ARIMA Model:\n")
+print(summary(female_model))
+```
+
+## 8. Forecast for the Next 10 Years and Plot Results
+```{r}
+male_forecast <- forecast(male_model, h = 10)
+female_forecast <- forecast(female_model, h = 10)
+
+par(mfrow = c(1,2))
+plot(male_forecast, main = "Male ARIMA Forecast", xlab = "Year", ylab = "Average Max Consonant Run")
+plot(female_forecast, main = "Female ARIMA Forecast", xlab = "Year", ylab = "Average Max Consonant Run")
+```
