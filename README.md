@@ -2,9 +2,9 @@
 
 TO DO - 2/10
 
-Xinhe - Use the arima function as covered in class, create an AIC table and look more carefully at diagnostics.
-Jaylin - Same as above, but using arima2 function with idea of comparing results. 
-Yiheng - Look through past projects AND past peer review so we can start working on that scholarship part of the project. 
+* Xinhe - Use the arima function as covered in class, create an AIC table and look more carefully at diagnostics.
+* Jaylin - Same as above, but using arima2 function with idea of comparing results.
+* Yiheng - Look through past projects AND past peer review so we can start working on that scholarship part of the project. 
 
 
 
