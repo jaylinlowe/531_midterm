@@ -1,0 +1,112 @@
+---
+title: "Ave_length"
+author: "Yiheng Xiang"
+date: "2025-02-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(stringr)
+library(dplyr)
+library(babynames)
+library(tseries)
+library(forecast)
+library(ggplot2)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Construct Weighted Average Name Length Data
+
+```{r loaddata}
+length_df2 <- babynames %>%
+  mutate(name_length = str_length(name)) %>%
+  mutate(name_length_people = name_length * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_length = sum(name_length_people)/sum(n)) 
+
+ggplot(length_df2, aes(x = year, y = avg_length, color = sex)) + geom_line()
+```
+
+## 2. Convert to time series
+
+```{r split-data&timeseries}
+length_female <- length_df2 %>% filter(sex == "F") %>% arrange(year)
+length_male   <- length_df2 %>% filter(sex == "M") %>% arrange(year)
+# Convert to time-series objects 
+ts_female <- ts(length_female$avg_length, 
+                start = min(length_female$year), 
+                end   = max(length_female$year),
+                frequency = 1)
+
+ts_male <- ts(length_male$avg_length,
+              start = min(length_male$year),
+              end   = max(length_male$year),
+              frequency = 1)
+```
+
+## 3. Plot Time Series and ACF/PACF
+
+```{r acf-pacf}
+# Female series
+par(mfrow=c(2,2))
+plot(ts_female, main="Avg Name Length (Female)", ylab="Avg Length", xlab="Year")
+Acf(ts_female, main="ACF: Female")
+Pacf(ts_female, main="PACF: Female")
+
+# Male series
+par(mfrow=c(2,2))
+plot(ts_male, main="Avg Name Length (Male)", ylab="Avg Length", xlab="Year")
+Acf(ts_male, main="ACF: Male")
+Pacf(ts_male, main="PACF: Male")
+```
+
+## 4. Fit ARIMA Model
+
+```{r fit_arima}
+fit_female <- auto.arima(ts_female, seasonal=FALSE, stepwise=TRUE, approximation=FALSE)
+fit_male   <- auto.arima(ts_male,   seasonal=FALSE, stepwise=TRUE, approximation=FALSE)
+
+summary(fit_female)
+summary(fit_male)
+```
+
+## 5. Diagnotics
+
+```{r diag}
+par(mfrow=c(1,1))
+tsdiag(fit_female)
+checkresiduals(fit_female)
+
+tsdiag(fit_male)
+checkresiduals(fit_male)
+```
+
+## 6. Forecast
+
+```{r Forecast}
+# Forecast next 10 periods 
+fc_female <- forecast(fit_female, h=10)
+fc_male   <- forecast(fit_male,   h=10)
+
+# Print forecast summaries
+fc_female
+fc_male
+# Shaded regions representing default 80% and 95% intervals
+autoplot(fc_female) +
+  labs(title = "Forecast: Average Female Name Length (Next 10 Years)",
+       x = "Year", y = "Avg Length")
+
+autoplot(fc_male) +
+  labs(title = "Forecast: Average Male Name Length (Next 10 Years)",
+       x = "Year", y = "Avg Length")
+```
+
+
+
+
+
+
+
+
+
+
