@@ -1,5 +1,14 @@
 # 531 Midterm Project: Complexity of US Baby Names
 
+TO DO - 2/10
+
+Xinhe - Use the arima function as covered in class, create an AIC table and look more carefully at diagnostics.
+Jaylin - Same as above, but using arima2 function with idea of comparing results. 
+Yiheng - Look through past projects AND past peer review so we can start working on that scholarship part of the project. 
+
+
+
+
 We plan to explore how the complexity of baby names in the US has changed over time, 
 using the `babynames` dataset available in R. Specifically, we will look at three
 attributes of names over time, separated by gender:
