@@ -1,0 +1,244 @@
+---
+title: "Name Length"
+output: html_document
+date: "2025-02-11"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(babynames)
+library(knitr)
+library(ggforce)
+library(tseries)
+library(gridExtra)
+library(grid)
+```
+# Plot of Average Name Length in Male and Female
+```{r}
+length_df2 <- babynames %>%
+  mutate(name_length = str_length(name)) %>%
+  mutate(name_length_people = name_length * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_length = sum(name_length_people) / sum(n))
+ggplot(length_df2, aes(x = year, y = avg_length, color = sex)) + geom_line()
+```
+
+
+```{r}
+# Subset to Male & Female Data
+length_df_female <- length_df2 %>% filter(sex == "F") %>% arrange(year)
+length_df_male <- length_df2 %>% filter(sex == "M") %>% arrange(year)
+```
+
+```{r}
+# Convert `avg_length` to Time Series
+ts_female <- ts(length_df_female$avg_length, start = min(length_df_female$year), frequency = 1)
+ts_male <- ts(length_df_male$avg_length, start = min(length_df_male$year), frequency = 1)
+```
+
+# Check Stationary: ACF Analysis & Differencing
+
+Autocorrelation Function (ACF) helps us analyze the dependency of a time series on its past values. If a time series exhibits high autocorrelation at many lags, it suggests the presence of trends, making it non-stationary. Differencing is a method used to remove trends and achieve stationarity, which is essential for effective time series modeling.
+
+The first-order difference operator is given by [1]:
+
+\[
+Z_n = \Delta y_n = y_n - y_{n-1}
+\] 
+
+This transformation helps eliminate linear trends, making the series more stationary.
+
+The second-order difference formula is given by [2]:
+
+\[
+Z_n = \Delta^2 y_n = (y_n - y_{n-1}) - (y_{n-1} - y_{n-2}) = y_n - 2y_{n-1} + y_{n-2}
+\]
+
+
+```{r}
+diff_ts_female <- diff(ts_female)
+diff2_ts_female <- diff(diff_ts_female)
+diff_ts_male <- diff(ts_male)
+diff2_ts_male <- diff(diff_ts_male)
+```
+
+```{r}
+# Female ACF
+acf(ts_female, main = "Female Name Length ACF Analysis Original")
+acf(diff_ts_female, main = "Female Name Length ACF Analysis 1st Differencing")
+acf(diff(diff_ts_female), main = "Female Name Length ACF Analysis 2nd Differencing")
+
+```
+
+```{r}
+# Male ACF
+acf(ts_male, main = "Male Name Length ACF Analysis Original")
+acf(diff_ts_male, main = "Male Name Length ACF Analysis 1st Differencing")
+acf(diff(diff_ts_male), main = "Male Name Length ACF Analysis 2nd Differencing")
+
+```
+
+**Interpretation:**
+In the ACF plots for both female and male name lengths, we observe the stationarity of the data. In the Original Series, strong autocorrelation is present, and the ACF value declines very slowly. After the 1st differencing, autocorrelation decreases significantly to near zero, though some structure remains, suggesting partial stationarity. By the 2nd differencing, the series becomes fully stationary, as most ACF values fall within the confidence bounds and fluctuate around zero, exhibiting a white noise pattern. This confirms that differencing has effectively removed the trend effects, and has made the time series stationary for further modeling.
+
+
+# Model Fitting and Selection by AIC
+
+The Autoregressive Moving Average (ARMA) model is given by [3]:
+
+\[
+Y_n = \phi_1 Y_{n-1} + \phi_2 Y_{n-2} + \dots + \phi_p Y_{n-p} + \epsilon_n + \psi_1 \epsilon_{n-1} + \dots + \psi_q \epsilon_{n-q}
+\]
+
+where \( \epsilon_n \) is a white noise process. Using the **backshift operator**, this can be rewritten as [3]:
+
+\[
+\phi(B) Y_n = \psi(B) \epsilon_n
+\]
+
+To select the best model, we use Akaike’s Information Criterion (AIC), which is defined as [4]:
+
+\[
+AIC = -2 \times \ell(\theta^*) + 2D
+\]
+
+where \( \ell(\theta^*) \) is the maximized log-likelihood, and \( D \) is the number of parameters. We select the model with the lowest AIC value to balance goodness-of-fit and model complexity, avoiding overfitting.
+
+```{r}
+# Define `aic_table()` Function
+aic_table <- function(data, P, Q) {
+  table <- matrix(NA, (P + 1), (Q + 1))
+  for (p in 0:P) {
+    for (q in 0:Q) {
+      table[p + 1, q + 1] <- arima(data, order = c(p, 0, q))$aic
+    }
+  }
+  dimnames(table) <- list(paste("AR", 0:P, sep=""),
+                          paste("MA", 0:Q, sep=""))
+  table
+}
+```
+
+# Apply `aic_table()` Function for Both Genders
+```{r}
+female_aic_table <- aic_table(diff2_ts_female, P = 4, Q = 5)
+male_aic_table <- aic_table(diff2_ts_male, P = 4, Q = 5)
+```
+
+# Display the AIC Tables
+```{r}
+kable(female_aic_table, digits = 2, caption = "AIC Table for Female Names")
+kable(male_aic_table, digits = 2, caption = "AIC Table for Male Names")
+```
+**Model Selection:**
+
+- For female name lengths, we select ARMA(3,3) as it provides the best balance between model complexity and fit according to the AIC values.
+
+- For male name lengths, we select ARMA(3,1) based on the lowest AIC score.
+
+# Fit ARMA Models
+```{r}
+female_arma33 <- arima(diff2_ts_female, order = c(3,0,3))
+female_arma33
+male_arma31 <- arima(diff2_ts_male, order = c(3,0,1))
+male_arma31
+```
+
+# Residual Diagnostics
+```{r}
+residuals_female <- resid(female_arma33)
+residuals_male <- resid(male_arma31)
+
+par(mfrow = c(2, 1))
+plot(residuals_female, type = "l", col = "blue", main = "Residuals of ARMA(3,3) - Female", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+plot(residuals_male, type = "l", col = "blue", main = "Residuals of ARMA(3,1) - Male", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+```
+
+
+```{r}
+par(mfrow = c(2, 2))
+hist(residuals_female, breaks = 20, main = "Histogram - Female", col = "lightblue")
+hist(residuals_male, breaks = 20, main = "Histogram - Male", col = "lightblue")
+qqnorm(residuals_female, main = "Q-Q Plot - Female")
+qqline(residuals_female, col = "red")
+qqnorm(residuals_male, main = "Q-Q Plot - Male")
+qqline(residuals_male, col = "red")
+par(mfrow = c(2, 1))
+acf(residuals_female, main = "Autocorrelation - Female")
+acf(residuals_male, main = "Autocorrelation - Male")
+Box.test(residuals_female, lag = 10, type = "Ljung-Box")
+Box.test(residuals_male, lag = 10, type = "Ljung-Box")
+```
+
+# Compute & Plot Inverse ARMA Roots(Diagnosis of causality, invertibility, stationarity)
+
+
+- The ARMA model is causal if all AR polynomial roots satisfy \( \phi(x) = 1 - \phi_1 x - \phi_2 x^2 - \dots - \phi_p x^p \) and are outside the unit circle.
+
+- The ARMA model is invertible if all MA polynomial roots satisfy \( \psi(x) = 1 + \psi_1 x + \psi_2 x^2 + \dots + \psi_q x^q \) and are outside the unit circle.
+
+- We use the `polyroot()` function to compute and check these roots [5].
+
+```{r}
+compute_roots <- function(model, type) {
+  if (type == "AR") {
+    roots <- polyroot(c(1, -coef(model)[grep("^ar", names(coef(model)))]))
+  } else if (type == "MA") {
+    roots <- polyroot(c(1, coef(model)[grep("^ma", names(coef(model)))]))
+  }
+  inv_roots <- 1 / roots
+  data.frame(Real = Re(inv_roots), Imaginary = Im(inv_roots), Type = paste("Inverse", type, "roots"))
+}
+
+ar_roots_female <- compute_roots(female_arma33, "AR")
+ma_roots_female <- compute_roots(female_arma33, "MA")
+ar_roots_male <- compute_roots(male_arma31, "AR")
+ma_roots_male <- compute_roots(male_arma31, "MA")
+
+roots_female_df <- bind_rows(ar_roots_female, ma_roots_female) %>% mutate(Gender = "Female")
+roots_male_df <- bind_rows(ar_roots_male, ma_roots_male) %>% mutate(Gender = "Male")
+roots_df <- bind_rows(roots_female_df, roots_male_df)
+
+plot_roots <- function(data) {
+  ggplot(data, aes(x = Real, y = Imaginary, color = Gender)) +
+    geom_point(size = 4) +
+    annotate("path",
+             x = cos(seq(0, 2 * pi, length.out = 100)),
+             y = sin(seq(0, 2 * pi, length.out = 100)),
+             color = "black", linetype = "solid") +  # Perfect circle
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_vline(xintercept = 0, linetype = "dashed") +
+    coord_fixed() +  # Ensures aspect ratio is 1:1
+    facet_grid(Gender ~ Type) +
+    theme_minimal() +
+    labs(title = "Inverse AR and MA Roots (Male & Female)", x = "Real", y = "Imaginary")
+}
+
+
+plot_roots(roots_df)
+```
+
+# References
+[1] Stationarity, white noise, and some basic time series models lecture slides Ch03 p.25. https://ionides.github.io/531w25/03/slides-annotated.pdf
+
+[2] Calculate the second order differencing of time series. https://www.philippe-fournier-viger.com/spmf/TimeSeriesSecondOrderDifferencing.php#:~:text=Calculating%20the%20second%20order%20differencing,Y_(i%2D2).
+
+[3] Linear time series models and the algebra of ARMA models lecture slides Ch04 p.13 https://ionides.github.io/531w25/04/slides-annotated.pdf.
+
+[4] Parameter estimation and model identification for ARMA models lecture slides Ch05 p.21. https://ionides.github.io/531w25/05/slides-annotated.pdf
+
+[5] Linear time series models and the algebra of ARMA models lecture slides Ch04 p.17 https://ionides.github.io/531w25/04/slides-annotated.pdf.
+
+
+[6] https://ionides.github.io/531w24/midterm_project/project02/blinded.html
+
+
