@@ -1,0 +1,155 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+# Weighted Average Longest Consonant Run
+```{r}
+longest_run <- rep(NA, nrow(babynames))
+for (i in 1:nrow(babynames)) {
+  name <- babynames$name[i]
+  longest_run[i] <- max(sapply(str_split(name, "[aeiouAEIOU]+")[[1]], nchar))
+}
+
+consonant_run_df <- babynames %>%
+  mutate(longest_run = longest_run) %>%
+  group_by(year, sex) %>%
+  summarize(weighted_longest_run = sum(n * longest_run)/sum(n), .groups = "drop")
+```
+
+```{r}
+ggplot(aes(x = year, y = weighted_longest_run, color = sex), data = consonant_run_df) + 
+  geom_line() + 
+  scale_x_continuous(breaks = c(seq(1880, 2017, 10), 2017)) +
+  scale_y_continuous(breaks = c(1.7, seq(1.75, 1.95, 0.05), 2.0), limits = c(1.7, 2)) + 
+  scale_color_manual(values = c("purple2", "mediumaquamarine")) + 
+  labs(x = "Year", y = "Number of Consonants", color = "Sex") + 
+  ggtitle("Average max number of consonants in a row in first name, by year") + 
+  theme_classic() + theme(legend.position = "bottom") 
+```
+
+```{r}
+consonant_female <- filter(consonant_run_df, sex == "F")
+consonant_male <- filter(consonant_run_df, sex == "M")
+```
+
+## FEMALE AVERAGE LONGEST CONSONANT RUN
+```{r}
+#code borrowed from slides, modified with try-catch 
+aic_table2 <- function(data, P, Q) {
+  table <- matrix(NA, (P+1), (Q + 1)) 
+  for (p in 0:P) {
+    for (q in 0:Q) {
+      table[p+1, q+1] <- tryCatch({arima2::arima(data, order = c(p, 0, q))$aic}, error = function(e){NA})
+    }
+  }
+  dimnames(table) <- list(paste("AR", 0:P, sep = ""),
+                          paste("MA", 0:Q, sep = ""))
+  return(table)
+}
+```
+
+```{r}
+female_table <- aic_table2(consonant_female$weighted_longest_run, 5, 5)
+```
+We get a warning about a convergence problem, and some of the p and q combinations return an error and display as NA in our table. We also not some mathematical impossibilities, where there is an increase larger than 2 units. (This is using the arima2 function though, so it's not that issue.)
+
+Let's try fitting this with trend too:
+
+```{r}
+aic_table2_trend <- function(data, P, Q, d = 0, xreg) {
+  table <- matrix(NA, (P+1), (Q + 1)) 
+  for (p in 0:P) {
+    for (q in 0:Q) {
+      table[p+1, q+1] <- tryCatch({arima2::arima(data, order = c(p, d, q), xreg = xreg)$aic}, error = function(e){NA})
+    }
+  }
+  dimnames(table) <- list(paste("AR", 0:P, sep = ""),
+                          paste("MA", 0:Q, sep = ""))
+  return(table)
+}
+
+female_table_trend <- aic_table2(consonant_female$weighted_longest_run, 5, 5)
+```
+Still getting a convergence issue, and AICs seem worse? 
+
+```{r}
+female_table_trend <- aic_table2_trend(consonant_female$weighted_longest_run, 5, 5, d = 0, xreg = consonant_female$year)
+female_table_trend
+```
+```{r}
+female_table_trend_d <- aic_table2_trend(consonant_female$weighted_longest_run, 5, 5, d = 1, xreg = consonant_female$year)
+female_table_trend_d
+```
+Still getting convergence issues here. 
+
+Let's try `auto.arima` just to see what it gives us?
+
+```{r}
+auto_model <- forecast::auto.arima(consonant_female$weighted_longest_run)
+```
+This suggest the best model is an ARIMA(1,2,1) model. Not sure what to do with the $d=2$ part? 
+
+## MALE AVERAGE LONGEST CONSONANT RUN
+
+```{r}
+aic_table <- function(data, P, Q, D = 0) {
+  table <- matrix(NA, (P+1), (Q + 1)) 
+  for (p in 0:P) {
+    for (q in 0:Q) {
+      table[p+1, q+1] <- tryCatch({arima2::arima(data, order = c(p, D, q))$aic}, 
+                                  error = function(e){
+                                    print(e)
+                                    NA})
+    }
+  }
+  dimnames(table) <- list(paste("AR", 0:P, sep = ""),
+                          paste("MA", 0:Q, sep = ""))
+  return(table)
+}
+
+male_table <- aic_table(consonant_male$weighted_longest_run, P = 5,Q = 5)
+male_table
+```
+A lot of problems here, most of these models have a "non-stationary AR part from CSS", which isn't suprising given the graph. 
+
+Let's try this with $d=1$:
+```{r}
+male_tableD1 <- aic_table(consonant_male$weighted_longest_run, P = 5,Q = 5, D=1)
+male_tableD1
+```
+This looks a lot better - we don't get any warnings or errors! This suggests our best model is an ARIMA(3,1,5) model. Let's check the roots of that model:
+
+```{r}
+male_consonant35 <- arima2::arima(consonant_male$weighted_longest_run, order = c(3, 1, 5))
+male_consonant35
+```
+```{r}
+plot(male_consonant35, order = c(3,1,5))
+```
+All of these inverse roots are inside the unit circle, which means this is causal and invertible. There are some roots that are right on the boundary, however. 
+```{r}
+male_consonant32 <- arima2::arima(consonant_male$weighted_longest_run, order = c(3, 1, 2))
+plot(male_consonant32)
+```
+I tried playing around with decreasing P and Q to see if we can get all the roots off the boundary, but that is tricky. Try doing the profile likelihood thing like we did in class? 
+
+
+# AVERAGE LENGTH
+
+## FEMALE AVERAGE LENGTH
+
+## MALE AVERAGE LENGTH
+
+# AVERAGE NUMBER OF VOWELS 
+
+## FEMALE AVERAGE NUMBER OF VOWELS
+
+## MALE AVERAGE NUMBER OF VOWELS 
+
+Sources:
+1. Looked up what this error meant (https://stackoverflow.com/questions/7233288/non-stationary-seasonal-ar-part-from-css-error-in-r)
+2. 
