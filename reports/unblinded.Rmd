@@ -1,0 +1,123 @@
+---
+title: "Complexity of US Baby Names"
+output: html_document
+author: Jaylin Lowe, Xinhe Wu, and Yiheng Xiang
+bibliography: unblinded.bib
+csl: apa-numeric-superscript-brackets.csl
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r, echo = FALSE, message = FALSE}
+#import packages
+library(babynames)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+```
+
+
+# Introduction
+
+Every year, names US parents choose for their children seem to get more unusual and more complex. The decision of what to name your baby has become so complex that some people choose to hire naming consultants to help them find unique names [@nyt]. However, this phenomenon is mostly ancedotal and may be influenced by the number of celebrities choosing extremely unusual and complicated names for this children. In this project, we set out to explore how the complexity of US baby names has changed over time. Are names actually becoming more complex? 
+
+To answer this question, we created three different time series, separated by gender, using data from the US Social Security Administration on first names given to babies born between 1880 and 2017 [@babynames]. Names given to fewer than five babies of the same gender in the same year are excluded; all others are included. As a result, we cannot observe trends in extremely unusual names; however, we can still observe general naming trends. The dataset gives us the number of babies given a particular name, divided by gender and year. 
+
+For each year and sex, we calculated three values aimed at capturing the complexity of names. These three were: the average length of a name, the average number of vowels in a name, and the average longest run of consonants in a name. These were weighted by how popular a name was. In other words, the denominator for these averages was the number of people born that year, not the number of unique names given. Popular names will be given more weight than unusual names. The first two values are fairly self-explanatory, but the third may benefit from an example. For each name, we calculated the longest run of consonants in a name. For example, the name "Isabella" has a longest consonant run of 2, from the "ll" part. The names "Ava" and "Astrid" would have a longest consonant run of 1 and 3, respectively. 
+
+We chose these questions because they seemed to address the question of "complexity" while being fairly easy to calculate and intuitive to explain. "Complexity" can mean very different things when it comes to names. We would generally consider very long names to be complex, but short names with a lot of consonants in a row might also fall under "complex names" especially if the repeated consonants make the name hard to pronounce. We initially got the idea to do average length and average vowel count from a data visualization we found [@data_viz] and came up with the idea for longest consonant run on our own. 
+
+# Exploratory Data Analysis 
+
+We start by exploring what these time series look like visually. First, we plot the average length of the names of all babies born 1880-2017, separated by sex. 
+
+
+```{r, echo = FALSE, message = F, warning = F}
+length_df2 <- babynames %>%
+  mutate(name_length = str_length(name)) %>%
+  mutate(name_length_people = name_length * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_length = sum(name_length_people)/sum(n)) 
+
+ggplot(length_df2, aes(x = year, y = avg_length, color = sex)) + geom_line() +
+scale_color_manual(values = c("purple2", "mediumaquamarine")) + 
+  labs(x = "Year", y = "Length", color = "Sex") + 
+  ggtitle("Average length of first name, by year") + 
+  theme_classic() + theme(legend.position = "bottom") 
+
+```
+
+The plots look fairly similar for both sexes. There appears to be a general increase in the average length in a name, peaking around the 1990s. 
+
+Next, we plot the average number of vowels in the names of all babies, again separated by sex:
+```{r, echo = F, message = F, warning = F}
+vowel_df2 <- babynames %>%
+  mutate(num_vowels = str_count(name, '[aeoiuAEOIU]')) %>%
+  mutate(num_vowels_people = num_vowels * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_num = sum(num_vowels_people)/sum(n)) 
+
+ggplot(vowel_df2, aes(x = year, y = avg_num, color = sex)) + geom_line() +
+  scale_color_manual(values = c("purple2", "mediumaquamarine")) + 
+  labs(x = "Year", y = "Number of Vowels", color = "Sex") + 
+  ggtitle("Average number of vowels in first name, by year") + 
+  theme_classic() + theme(legend.position = "bottom") 
+
+```
+
+Here, the overall shape of the time series looks very similar for male and female babies. There might be an overall slight increase from 1880 to 2017, but there also appears to be a decrease around the 1960s. It is also worth noting that this plot is markedly different from the previous one. You might have initially expected that the average number of vowels would look similar to the average length of a name, since longer names likely require more vowels. However, this is not the case. 
+
+Next, we plot the average longest consonant run in the names of all babies, again separated by sex:
+
+```{r, echo = F, message = F, warning = F, cache = T}
+longest_run <- rep(NA, nrow(babynames))
+for (i in 1:nrow(babynames)) {
+  name <- babynames$name[i]
+  longest_run[i] <- max(sapply(str_split(name, "[!aeiouAEIOU]")[[1]], nchar))
+}
+
+consonant_run_df <- babynames %>%
+  mutate(longest_run = longest_run) %>%
+  group_by(year, sex) %>%
+  summarize(weighted_longest_run = sum(n * longest_run)/sum(n)) 
+
+
+ggplot(aes(x = year, y = weighted_longest_run, color = sex), data = consonant_run_df) + 
+  geom_line() + 
+  scale_x_continuous(breaks = c(seq(1880, 2017, 10), 2017)) +
+  scale_y_continuous(breaks = c(1.7, seq(1.75, 1.95, 0.05), 2.0), limits = c(1.7, 2)) + 
+  scale_color_manual(values = c("purple2", "mediumaquamarine")) + 
+  labs(x = "Year", y = "Number of Consonants", color = "Sex") + 
+  ggtitle("Average max number of consonants in a row in first name, by year") + 
+  theme_classic() + theme(legend.position = "bottom") 
+
+```
+
+For both sexes, there appears to be a dramatic decrease in the average longest consonant run starting in the 1990s. Prior to that, there appears to be a slight increase for female babies while the values for male babies stay fairly constant. The peak here appears to be around the same time as the peak for average length, which makes sense since shorter names also means shorter runs of consonants. However, the graphs are still fairly different. 
+
+Calculating these values and plotting them required some additional sources, including documentation for the `stringr` and `ggplot2` packages and a couple chatGPT queries [@stringr; @ai1; @ai2; @ggplot]. 
+
+
+
+# Modeling
+
+## Average Name Length
+
+## Average Number of Vowels
+
+## Average Longest Run of Consonants 
+
+
+
+# Conclusion? Discussion? 
+
+# Contributions 
+
+# Scholarship 
+Put our project in context of others? 
+
+**<big>References</big>**.
+
+
+
+
