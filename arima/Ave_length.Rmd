@@ -62,6 +62,8 @@ Pacf(ts_male, main="PACF: Male")
 
 ## 4. Fit ARIMA Model
 
+
+
 ```{r fit_arima}
 fit_female <- auto.arima(ts_female, seasonal=FALSE, stepwise=TRUE, approximation=FALSE)
 fit_male   <- auto.arima(ts_male,   seasonal=FALSE, stepwise=TRUE, approximation=FALSE)
@@ -71,6 +73,71 @@ summary(fit_male)
 ```
 
 ## 5. Diagnotics
+
+```{r}
+
+observed_values_fe <- as.numeric(ts_female)
+fitted_values_fe   <- as.numeric(fitted(fit_female))
+time_index_fe      <- time(ts_female)  
+
+df_plot_fe <- data.frame(
+  Year    = time_index_fe,
+  Observed = observed_values_fe,
+  Fitted   = fitted_values_fe
+)
+
+ggplot(df_plot_fe, aes(x = Year)) +
+  geom_line(aes(y = Observed), color = "blue") +
+  geom_line(aes(y = Fitted),   color = "red") +
+  labs(title = "Female Name Length: Observed vs. Fitted",
+       x     = "Year",
+       y     = "Average Name Length") +
+  theme_minimal()
+
+observed_values_ma <- as.numeric(ts_male)
+fitted_values_ma   <- as.numeric(fitted(fit_male))
+time_index_ma      <- time(ts_male)  
+
+df_plot_ma <- data.frame(
+  Year    = time_index_ma,
+  Observed = observed_values_ma,
+  Fitted   = fitted_values_ma
+)
+
+ggplot(df_plot_ma, aes(x = Year)) +
+  geom_line(aes(y = Observed), color = "blue") +
+  geom_line(aes(y = Fitted),   color = "red") +
+  labs(title = "Male Name Length: Observed vs. Fitted",
+       x     = "Year",
+       y     = "Average Name Length") +
+  theme_minimal()
+```
+
+```{r}
+# Basic spectral analysis using "spec.pgram" from the 'stats' package:
+spectral_female <- spec.pgram(ts_female, 
+                              spans   = c(3,3),   
+                              taper   = 0.1,     
+                              log     = "no",     
+                              main    = "Periodogram: Female Avg Name Length",
+                              xlab    = "Frequency (cycles per year)",
+                              ylab    = "Spectral Density")
+
+print(spectral_female)
+spectral_male <- spec.pgram(ts_male, 
+                              spans   = c(3,3),   
+                              taper   = 0.1,     
+                              log     = "no",     
+                              main    = "Periodogram: Male Avg Name Length",
+                              xlab    = "Frequency (cycles per year)",
+                              ylab    = "Spectral Density")
+
+# Print or inspect the result
+print(spectral_female)
+```
+
+
+
 
 ```{r diag}
 par(mfrow=c(1,1))
@@ -102,10 +169,81 @@ autoplot(fc_male) +
 ```
 
 
+### Using "Trend + ARMA” Model to fit the data.
 
+```{r}
+# Fit a linear trend model
+lm_trend_female <- tslm(ts_female ~ trend+I(trend^2))
 
+# Inspect the regression summary
+summary(lm_trend_female)
+resid_female <- residuals(lm_trend_female)
 
+# Quick stationarity check, e.g. with Augmented Dickey-Fuller test
+# (from 'tseries' package):
+# library(tseries)
+adf.test(resid_female)
+```
 
+```{r}
+fit_arma_female <- auto.arima(resid_female,
+                              seasonal=FALSE,  # usually no seasonality in yearly data
+                              stepwise=TRUE, approximation=FALSE)
+summary(fit_arma_female)
+
+checkresiduals(fit_arma_female)
+```
+
+```{r}
+# 1. Plot the observed data (black line)
+plot(ts_female,
+     main = "Female: Observed vs. Fitted (ARIMA Model)",
+     ylab = "Average Name Length",
+     xlab = "Year")
+
+# 2. Overlay the fitted values (red line)
+lines(fitted(fit_female), col = "red")
+
+# 3. Optional legend
+legend("topleft",
+       legend = c("Observed", "Fitted"),
+       col    = c("black", "red"),
+       lty    = 1, bty = "n")
+```
+
+```{r}
+# 3.1 Predict the linear trend for the next 10 years
+h <- 10  # forecast horizon
+future_trend <- forecast(lm_trend_female, h = h)
+
+# future_trend$mean contains the predicted linear component
+
+# 3.2 Forecast the ARMA residuals for the next 10 time steps
+fc_resid <- forecast(fit_arma_female, h = h)
+
+# 3.3 Combine them: final forecast = trend forecast + residual forecast
+fc_combined <- future_trend$mean + fc_resid$mean
+
+# 3.4 Let's store the lower/upper bounds too (simplified approach)
+lo_combined <- future_trend$lower[,1] + fc_resid$lower[,1]  # 80% interval by default
+hi_combined <- future_trend$upper[,1] + fc_resid$upper[,1]  # 80% interval
+
+# 3.5 Plot everything (base R example):
+# 1. Convert to decimal for safety (works fine even for annual)
+start_val <- as.numeric(start(ts_female))
+end_val   <- as.numeric(end(ts_female))
+
+# 2. Plot
+ts.plot(ts_female,
+        xlim = c(start_val, end_val + 10),
+        main = "Example Time Series Plot",
+        ylab = "Value")
+
+lines(seq(end(ts_female)[1]+1, end(ts_female)[1]+h),
+      fc_combined, col="red", lwd=2)
+
+# Optionally add bounding lines or use the autoplot approach with data frames
+```
 
 
 
