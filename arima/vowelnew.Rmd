@@ -1,0 +1,136 @@
+---
+title: "vowel_new"
+output: html_document
+date: "2025-02-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(babynames)
+library(knitr)
+library(ggforce)
+library(tseries)
+library(gridExtra)
+library(grid)
+```
+# Plot of Average Vowel Count in Male and Female
+```{r}
+vowel_df2 <- babynames %>%
+  mutate(num_vowels = str_count(name, '[aeoiuAEOIU]')) %>%
+  mutate(num_vowels_people = num_vowels * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_num = sum(num_vowels_people)/sum(n))
+
+ggplot(vowel_df2, aes(x = year, y = avg_num, color = sex)) + geom_line()
+```
+
+```{r}
+# Subset to Male & Female Data
+vowel_df_female <- vowel_df2 %>% filter(sex == "F") %>% arrange(year)
+vowel_df_male <- vowel_df2 %>% filter(sex == "M") %>% arrange(year)
+```
+
+```{r}
+# Convert `avg_num` to Time Series
+ts_female <- ts(vowel_df_female$avg_num, start = min(vowel_df_female$year), frequency = 1)
+ts_male <- ts(vowel_df_male$avg_num, start = min(vowel_df_male$year), frequency = 1)
+```
+
+# Check Stationary: ACF Analysis & Differencing
+```{r}
+diff_ts_female <- diff(ts_female)
+diff2_ts_female <- diff(diff_ts_female)
+diff_ts_male <- diff(ts_male)
+diff2_ts_male <- diff(diff_ts_male)
+```
+
+```{r}
+# Female ACF
+acf(ts_female, main = "Female Vowel Count ACF Analysis Original")
+acf(diff_ts_female, main = "Female Vowel Count ACF Analysis 1st Differencing")
+acf(diff(diff_ts_female), main = "Female Vowel Count ACF Analysis 2nd Differencing")
+```
+
+```{r}
+# Male ACF
+acf(ts_male, main = "Male Vowel Count ACF Analysis Original")
+acf(diff_ts_male, main = "Male Vowel Count ACF Analysis 1st Differencing")
+acf(diff(diff_ts_male), main = "Male Vowel Count ACF Analysis 2nd Differencing")
+```
+
+# Model Fitting and Selection by AIC
+```{r}
+aic_table <- function(data, P, Q) {
+  table <- matrix(NA, (P + 1), (Q + 1))
+  for (p in 0:P) {
+    for (q in 0:Q) {
+      table[p + 1, q + 1] <- arima(data, order = c(p, 0, q))$aic
+    }
+  }
+  dimnames(table) <- list(paste("AR", 0:P, sep=""),
+                          paste("MA", 0:Q, sep=""))
+  table
+}
+```
+
+# Apply `aic_table()` Function for Both Genders
+```{r}
+female_aic_table <- aic_table(diff_ts_female, P = 4, Q = 5)
+male_aic_table <- aic_table(diff_ts_male, P = 4, Q = 5)
+```
+
+# Display the AIC Tables
+```{r}
+kable(female_aic_table, digits = 2, caption = "AIC Table for Female Name Vowel")
+kable(male_aic_table, digits = 2, caption = "AIC Table for Male Name Vowel")
+```
+
+# Fit ARMA Models
+```{r}
+female_arma33 <- arima(diff_ts_female, order = c(3,0,3))
+male_arma31 <- arima(diff_ts_male, order = c(3,0,1))
+```
+
+# Residual Diagnostics
+```{r}
+residuals_female <- resid(female_arma33)
+residuals_male <- resid(male_arma31)
+
+par(mfrow = c(2, 1))
+plot(residuals_female, type = "l", col = "blue", main = "Residuals of ARMA(3,3) - Female Vowel", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+plot(residuals_male, type = "l", col = "blue", main = "Residuals of ARMA(3,1) - Male Vowel", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+hist(residuals_female, breaks = 20, main = "Histogram - Female", col = "lightblue")
+hist(residuals_male, breaks = 20, main = "Histogram - Male", col = "lightblue")
+qqnorm(residuals_female, main = "Q-Q Plot - Female")
+qqline(residuals_female, col = "red")
+qqnorm(residuals_male, main = "Q-Q Plot - Male")
+qqline(residuals_male, col = "red")
+par(mfrow = c(2, 1))
+acf(residuals_female, main = "Autocorrelation - Female")
+acf(residuals_male, main = "Autocorrelation - Male")
+Box.test(residuals_female, lag = 10, type = "Ljung-Box")
+Box.test(residuals_male, lag = 10, type = "Ljung-Box")
+```
+
+### Female
+```{r}
+library(forecast)
+autoplot(female_arma33)
+```
+
+### Male
+```{r}
+autoplot(male_arma31)
+```
