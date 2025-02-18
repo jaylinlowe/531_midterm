@@ -189,7 +189,13 @@ plot(arima2::arima(resid_female, order = c(2, 0, 1))) + ggtitle("Inverse Roots F
 
 Interestingly, an $ARMA(2,1)$ model is also what the `auto.arima` model from the `forecast` package [@forecast] suggests. Given that this model does not have the invertibility problems of models with larger $p$ and $q$, we will choose this $ARMA(2,1)$ model fit to the residuals of a cubic polynomial as our final model. 
 
+## To Do: equations and more formal math? Forecasting? Final conclusion?
 
+Next, we will look at fitting a model to the average max consonant run in male baby names. 
+
+```{r, echo = F}
+consonant_male <- filter(consonant_run_df, sex == "M")
+```
 
 
 # Conclusion? Discussion? 

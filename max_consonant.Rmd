@@ -147,6 +147,49 @@ auto.arima(resid_female)
 It chooses ARIMA(2,0,1), which matches our thoughts by looking at the roots and AIC table. 
 
 
+## MALE CONSONANT RUN
+
+The male data also appears to need a non-linear trend. 
+
+```{r}
+ts_male <- ts(consonant_male$weighted_longest_run,
+                start = min(consonant_male$year), 
+                end   = max(consonant_male$year),
+                frequency = 1)
+
+lm_trend_male <- tslm(ts_male ~ trend+I(trend^2) + I(trend^3))
+
+resid_male <- residuals(lm_trend_male)
+
+plot(ts_male,
+     main = "Male: Observed vs. Fitted (ARIMA Model)",
+     ylab = "Average Max Consonant Run",
+     xlab = "Year")
+
+lines(fitted(lm_trend_male), col = "red")
+```
+Initially tried a quadratic, but we still get non-stationarity issues, so we detrend with a cubic instead. The cubic does look like it might be overfitting a little bit, but a quadratic isn't good enough, so we will stick with a cubic.  
+
+```{r}
+set.seed(49282)
+detrend_male <- aic_table(resid_male, P = 5, Q = 5, D = 0)
+
+detrend_male
+```
+By AIC alone, best model seems to be ARMA(5,4). Roots:
+
+```{r}
+plot(arima2::arima(resid_male, order = c(5, 0, 4)))
+```
+A lot of these roots look very close to the boundary! We probably don't want to pick this model. 
+
+```{r}
+plot(arima2::arima(resid_male, order = c(4, 0, 0)))
+```
+```{r}
+auto.arima(resid_male)
+```
+
 
 
 ## OLD STUFF
