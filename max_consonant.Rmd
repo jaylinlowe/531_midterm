@@ -5,6 +5,14 @@ editor_options:
   chunk_output_type: inline
 ---
 
+```{r, echo = F, warning = F, message = F}
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(ggfortify)
+```
+
+
 ```{r, cache = T}
 longest_run <- rep(NA, nrow(babynames))
 for (i in 1:nrow(babynames)) {
@@ -15,6 +23,7 @@ for (i in 1:nrow(babynames)) {
 consonant_run_df <- babynames %>%
   mutate(longest_run = longest_run) %>%
   group_by(year, sex) %>%
+  #group_by(year) %>%
   summarize(weighted_longest_run = sum(n * longest_run)/sum(n)) 
 
 
@@ -55,7 +64,7 @@ aic_table <- function(data, P, Q, D = 0, xreg = NULL) {
         })
       }
       else{
-        table[p+1, q+1] <- tryCatch({arima2::arima(data, order = c(p, D, q), xreg = xreg)$aic},
+        table[p+1, q+1] <- tryCatch({arima2::arima(data, order = c(p, D, q), xreg = xreg, max_iters = 500)$aic},
         error = function(e){
           print(c(p,q))
           print(e) 
@@ -72,52 +81,111 @@ aic_table <- function(data, P, Q, D = 0, xreg = NULL) {
                           paste("MA", 0:Q, sep = ""))
   return(table)
 }
-
-
-aic_table2 <- function(data, P, Q, d = 0, xreg) {
-  table <- matrix(NA, (P+1), (Q + 1)) 
-  for (p in 0:P) {
-    for (q in 0:Q) {
-      table[p+1, q+1] <- tryCatch({arima2::arima(data, order = c(p, d, q), xreg = xreg)$aic}, 
-        error = function(e){
-          print(c(p,q))
-          print(e) 
-          NA},
-        warning = function(w) {
-          print(c(p,q))
-          print(w)
-          NA
-        })
-    }
-  }
-  dimnames(table) <- list(paste("AR", 0:P, sep = ""),
-                          paste("MA", 0:Q, sep = ""))
-  return(table)
-}
-
 ```
 
 
 ## Female Max Consonant Run
 
-AIC table with $d = 0$ and no trend: 
+
+## De-trend 
+
+```{r}
+ts_female <- ts(consonant_female$weighted_longest_run,
+                start = min(consonant_female$year), 
+                end   = max(consonant_female$year),
+                frequency = 1)
+
+lm_trend_female <- tslm(ts_female ~ trend+I(trend^2) + I(trend^3))
+
+plot(ts_female,
+     main = "Female: Observed vs. Fitted (ARIMA Model)",
+     ylab = "Average Max Consonant Run",
+     xlab = "Year")
+
+lines(fitted(lm_trend_female), col = "red")
+```
+```{r}
+plot_df <- data.frame(year = seq(1880, 2017, by = 1), orig = c(ts_female), fitted = c(fitted(lm_trend_female)))
+
+ggplot(plot_df) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = fitted, x = year), color = "black", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Fitted Cubic Values")
+```
+```{r}
+#detrended data:
+
+resid_female <- residuals(lm_trend_female)
+plot(resid_female, 
+     main = "Female: Detrended Data")
+```
+
+```{r}
+set.seed(49282)
+detrend_female <- aic_table(resid_female, P = 5, Q = 5, D = 0)
+```
+So we should stick to p, q less than 4. 
+
+```{r}
+detrend_female
+```
+The best AIC in this belongs to the ARMA(2,2) model. Let's look at the roots:
+
+```{r}
+plot(arima2::arima(resid_female, order = c(2, 0, 2)))
+```
+One of these MA roots is right on the border. 
+
+If we instead choose a ARMA(2,0,1):
+
+```{r}
+plot(arima2::arima(resid_female, order = c(2, 0, 1)))
+```
+This looks much better. Out of curiosity, what does `auto.arima` choose?
+
+```{r}
+auto.arima(resid_female)
+```
+
+It chooses ARIMA(2,0,1), which matches our thoughts by looking at the roots and AIC table. 
+
+
+
+
+## OLD STUFF
 
 ```{r}
 #d = 0 and no trend
 consonant_female_0 <- aic_table(consonant_female$weighted_longest_run, P = 5, Q = 5, D = 0)
+```
+We get some non-stationary issues here, suggesting that a model with $d = 0$ and no trend may not be a good choice. 
 
+
+```{r}
 #d = 1 and no trend
 consonant_female_1 <- aic_table(consonant_female$weighted_longest_run, P = 5, Q = 5, D = 1)
+```
+Here we get a convergence issue for ARIMA(4,1,4). We might be able to use other p,q combinations here. 
 
+
+```{r}
 #d = 0 with trend
 consonant_female_0_trend <- aic_table(consonant_female$weighted_longest_run, P = 5, Q = 5, D = 0, xreg = consonant_female$year)
+```
 
+For the table with $d=1$ and trend, our lowest AIC is ARIMA(3,1, 2), but an ARIMA(4,1, 2) is very close behind. For the table with $d= 1$ and no trend, the best model is a ARIMA(4,1,2). 
+
+This produces lots of stationarity warnings, definitely don't want to use this! 
+
+
+```{r}
 #d = 1 with trend
 consonant_female_1_trend <- aic_table(consonant_female$weighted_longest_run, P = 5, Q = 5, D = 1, xreg = consonant_female$year)
 ```
-For our model with $d = 0$ and no trend, we get stationarity warnings for ARMA(3,2) and ARMA(5,4) and convergence issues with (1,4). For $d=1$ and no trend, we get a convergence issue at $4,4$. For $d=0$ with trend, we get a lot of stationarity and convergence issues. For $d = 1$ with trend, we get only a single convergence issue at $4,4$. 
+Similar to the $d=1$ with no trend model, we see a convergence issue at 4,4. The results here suggest that we need to difference once to avoid stationarity issues. 
 
-For the table with $d=1$ and trend, our lowest AIC is ARIMA(3,1, 2), but an ARIMA(4,1, 2) is very close behind. For the table with $d= 1$ and no trend, the best model is a ARIMA(4,1,2). 
+Let's look at the two tables produced from differencing once, one with trend and one without:
+
+
+
+
 
 Let's do a likelihood ratio test between an ARIMA(4,1,2) with trend and one without trend. 
 
@@ -137,9 +205,57 @@ But we actually don't get issues at all levels of the ARMA(p,q) model with no tr
 ```{r}
 plot(arima2::arima(consonant_female$weighted_longest_run, order = c(4, 0, 3)))
 ```
-This actually looks pretty good! 
+This actually looks pretty good!
 
-
+```{r}
+plot(arima2::arima(consonant_female$weighted_longest_run, order = c(2, 0, 2)))
+```
+For females, ARMA(2,2) with no trend and no differencing actually looks okay! Inverse roots are well within the unit circle. The AIC for this one wasn't the highest of all ARMA models with no trend and no differencing, but it was one of the higher ones. 
 
 
 ## Male Max Consonant Run
+
+```{r}
+consonant_male_0 <- aic_table(consonant_male$weighted_longest_run, P = 5, Q = 5, D = 0)
+
+#d = 1 and no trend
+consonant_male_1 <- aic_table(consonant_male$weighted_longest_run, P = 5, Q = 5, D = 1)
+
+#d = 0 with trend
+consonant_male_0_trend <- aic_table(consonant_male$weighted_longest_run, P = 5, Q = 5, D = 0, xreg = consonant_male$year)
+
+#d = 1 with trend
+consonant_male_1_trend <- aic_table(consonant_male$weighted_longest_run, P = 5, Q = 5, D = 1, xreg = consonant_male$year)
+```
+The version with d = 0 and no trend gives a bunch of stationarity errors. d = 1 and no trend gives none. d = 0 with trend also gives a ridiculous amount. d = 1 and trend gives one "NaNs" produced, don't know what's causing it. 
+
+This seems to indicate we need to difference once, since adding a trend doesn't seem to help with the stationarity issue. 
+
+```{r}
+consonant_male_1
+```
+Best model here is ARIMA(3, 1, 5) 
+
+For the one with trend:
+```{r}
+consonant_male_1_trend
+```
+Best here is also ARIMA(3,1,5) - but the likelihood is actually lower, suggesting we probably don't need trend.
+
+Let's look at the roots:
+```{r}
+plot(arima2::arima(consonant_male$weighted_longest_run, order = c(3, 1, 5)))
+```
+Some of these are right on the border, especially for 2 of the MA roots. 
+
+We see a pretty good AIC for ARIMA(3,1,3), which would match with removing 2 of the MA roots, so let's look at that: 
+```{r}
+plot(arima2::arima(consonant_male$weighted_longest_run, order = c(3, 1, 3)))
+```
+This looks a lot better, but there's still 1 MA root right on the border. Adding trend doesn't help. 
+
+This works, but has a pretty low AIC: 
+```{r}
+plot(arima2::arima(consonant_male$weighted_longest_run, order = c(2, 1, 1)))
+```
+
