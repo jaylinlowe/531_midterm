@@ -147,7 +147,7 @@ Calculating these values and plotting them required some additional sources, inc
 
 ## Average Longest Run of Consonants 
 
-We will fit a model for females and males separately. Looking at the graphs, the time series for the average longest consonant run for female names appears to have a non-linear trend. As a result, we start by fitting a cubic polynomial to the female name data to de-trend it. We originally tried a quadratic, but this did not appear to fit the data properly. The graph below shows the original female name data versus the fitted values (dotted line) from the cubic polynomial: 
+We will fit a model for females and males separately. Looking at the graphs, the time series for the average longest consonant run for female names appears to have a non-linear trend. As a result, we start by fitting a quadratic polynomial to the female name data to de-trend it. The graph below shows the original female name data versus the fitted values (dotted line) from the quadratic polynomial: 
 
 ```{r, echo = F}
 consonant_female <- filter(consonant_run_df, sex == "F")
@@ -157,14 +157,19 @@ ts_female <- ts(consonant_female$weighted_longest_run,
                 end   = max(consonant_female$year),
                 frequency = 1)
 
-lm_trend_female <- tslm(ts_female ~ trend+I(trend^2) + I(trend^3))
+lm_trend_female <- tslm(ts_female ~ trend+I(trend^2))
 
 plot_df <- data.frame(year = seq(1880, 2017, by = 1), orig = c(ts_female), fitted = c(fitted(lm_trend_female)))
 
-ggplot(plot_df) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = fitted, x = year), color = "black", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Fitted Cubic Values")
+ggplot(plot_df) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = fitted, x = year), color = "black", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Fitted Quadratic Values")
 ```
 
-Now, we fit an $ARMA(p,q)$ model to the residuals created from the cubic polynomial. To choose $p$ and $q$, we consider $p \in (0,5)$ and $q \in (0,5)$ and calculate the AIC for each resulting model. We use a modified version of the code shown in class [@notes531] that inserts a `NA` value for any $p,q$ combinations that produce errors or warnings. Note that we are using `arima2` [@arima2] to help avoid optimization issues. 
+Now, we fit an $ARMA(p,q)$ model to the residuals created from the quadratic polynomial. To choose $p$ and $q$, we consider $p \in (0,5)$ and $q \in (0,5)$ and calculate the AIC for each resulting model. We use a modified version of the code shown in class [@notes531] that inserts a `NA` value for any $p,q$ combinations that produce errors or warnings. Note that we are using `arima2` [@arima2] to help avoid optimization issues. Essentially, we are fitting:
+
+$$
+Y_n^Q = \alpha + \beta_1 X_n + \beta_2 X_n^2 + \epsilon_n
+$$
+$\alpha$, $beta_1$, and $\beta_2$ are obtained from the regression model and are 1.749, 0.004247, and -0.00002508 respectively. $\epsilon_n$ is a Gaussian ARMA process. The table below displays AIC values for different $p,q$ values for this ARMA model. 
 
 ```{r, echo = F, warning = F, message = F, include = F}
 set.seed(49282)
@@ -189,7 +194,41 @@ plot(arima2::arima(resid_female, order = c(2, 0, 1))) + ggtitle("Inverse Roots F
 
 Interestingly, an $ARMA(2,1)$ model is also what the `auto.arima` model from the `forecast` package [@forecast] suggests. Given that this model does not have the invertibility problems of models with larger $p$ and $q$, we will choose this $ARMA(2,1)$ model fit to the residuals of a cubic polynomial as our final model. 
 
-## To Do: equations and more formal math? Forecasting? Final conclusion?
+Next, we plot the forecasted values for the next 40 years: 
+```{r, echo = F, warning = F, message = F}
+female_final <- stats::arima(resid_female, order = c(2, 0, 1))
+
+h <- 40
+
+future_trend <- forecast(lm_trend_female, h = h)
+fc_resid <- forecast(female_final, h = h)
+
+fc_combined <- future_trend$mean + fc_resid$mean
+
+plot_df2 <- data.frame(year = seq(1880, 2017+h, by = 1), orig = c(ts_female, rep(NA, h)), fitted = c(fitted(lm_trend_female), rep(NA,h)), forecasted = c(rep(NA, 138), fc_combined))
+
+ggplot(plot_df2) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = forecasted, x = year), color = "navyblue", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Forecast") 
+```
+
+These forecasted points are fairly extreme and raise some doubts about our model. The quadratic fit to de-trend the data indicates a large drop past 2017; this is necessary to fit a quadratic. However, it is unlikely that this downward trend will continue for 40 years. We suspect that the average max consonant run might exhibit cyclical behavior beyond what we are able to observe with these 138 data points. For instance, suppose cycles occur approximately every 50 years, which seems plausible given the graph. If this is true, our observed data only includes approximately two to three cycles, which isn't enough to capture the true relationship. Instead, our quadratic fit to the data would predict that the decrease that started in the 1970s will continue. 
+
+After discovering this, we attempted to use a LOESS smoother to detrend instead. The plot below displays the observed values with the LOESS predictions. However, this looks very similar to the quadratic smoother and exhibits the same decreasing behavior for the 2000s. We cannot observe the forecasted values here, so we choose to stick with the ARMA(2,1) errors and the quadratic model. Interestingly, the best model for the residuals from the LOESS smoother is also an ARMA(2,1), reinforcing this decision. 
+```{r, echo = F, warning = F, message = F}
+loess_female <- loess(weighted_longest_run ~ year, consonant_female)
+loess_female_fitted <- fitted(loess_female)
+
+plot_df2 <- data.frame(year = seq(1880, 2017, by = 1), orig = c(ts_female), fitted = loess_female_fitted)
+
+ggplot(plot_df2) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = fitted, x = year), color = "black", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Fitted Quadratic Values")
+
+loess_resid <- ts(consonant_female$weighted_longest_run-loess_female_fitted ,
+                start = min(consonant_female$year), 
+                end   = max(consonant_female$year),
+                frequency = 1)
+```
+
+Ultimately, we need more years of data to be able to say anything concrete about how the average longest consonant run in female baby names changes. It's interesting that both of our de-trending options treated the two separate peaks and the valley between them as noise, which would suggest a time series that only has one peak in 138 years, which might indeed be what's happening. 
+
 
 Next, we will look at fitting a model to the average max consonant run in male baby names. 
 
