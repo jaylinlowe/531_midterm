@@ -147,6 +147,94 @@ Calculating these values and plotting them required some additional sources, inc
 
 ## Average Number of Vowels
 
+### Data Preparation and Quadratic Trend
+
+```{r vowel-data, echo = F}
+vowel_run_df <- babynames %>%
+  mutate(num_vowels = str_count(name, '[aeoiuAEOIU]')) %>%
+  mutate(num_vowels_people = num_vowels * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_num = sum(num_vowels_people)/sum(n))
+
+# Separate data for males and females
+vowel_female <- filter(vowel_run_df, sex == "F")
+vowel_male <- filter(vowel_run_df, sex == "M")
+
+# Create time series for both genders
+ts_female_vowel <- ts(vowel_female$avg_num, start = min(vowel_female$year), frequency = 1)
+ts_male_vowel <- ts(vowel_male$avg_num, start = min(vowel_male$year), frequency = 1)
+
+# Fit quadratic trends
+lm_trend_female_vowel <- tslm(ts_female_vowel ~ trend + I(trend^2))
+lm_trend_male_vowel <- tslm(ts_male_vowel ~ trend + I(trend^2))
+```
+
+```{r plot-quadratic-vowel, echo = F}
+plot_df_vowel <- bind_rows(
+  data.frame(year = vowel_female$year, orig = as.numeric(ts_female_vowel), fitted = as.numeric(fitted(lm_trend_female_vowel)), sex = "Female"),
+  data.frame(year = vowel_male$year, orig = as.numeric(ts_male_vowel), fitted = as.numeric(fitted(lm_trend_male_vowel)), sex = "Male")
+)
+
+ggplot(plot_df_vowel, aes(x = year, y = orig, color = sex)) +
+  geom_line() +
+  geom_line(aes(y = fitted), linetype = "dotted") +
+  labs(x = "Year", y = "Average Number of Vowels") +
+  ggtitle("Observed Average Vowel Run vs. Fitted Quadratic Values")
+```
+
+For both females and males, the average vowel count fluctuates across the decades. We can see troughs around 1960s, and there is a trend of increasing after that.
+The quadratic trend lines capture a broad “U-shaped” curve, the line goes down and then up.
+### ARMA Modeling of the Residuals
+
+```{r arma-aic-table-vowel, echo = F}
+# Extract residuals from the quadratic model
+resid_female_vowel <- residuals(lm_trend_female_vowel)
+resid_male_vowel <- residuals(lm_trend_male_vowel)
+
+detrend_female_vowel <- aic_table(resid_female_vowel, P = 5, Q = 5, D = 0)
+detrend_male_vowel <- aic_table(resid_male_vowel, P = 5, Q = 5, D = 0)
+
+knitr::kable(detrend_female_vowel, caption = "AIC Table for Detrended Female Vowel Run Data")
+knitr::kable(detrend_male_vowel, caption = "AIC Table for Detrended Male Vowel Run Data")
+```
+
+Based on the AIC tables, ARMA(2,4) model can be a good fit for female vowels, while the male series fits well with ARMA(2,1).
+
+```{r plot-inverse-roots-vowel, echo = F}
+vowel_final_female <- stats::arima(resid_female_vowel, order = c(2, 0, 4))
+vowel_final_male <- stats::arima(resid_male_vowel, order = c(2, 0, 1))
+
+autoplot(vowel_final_female) + ggtitle("Inverse Roots For ARMA(2,4) Model (Female Vowels)")
+autoplot(vowel_final_male) + ggtitle("Inverse Roots For ARMA(2,1) Model (Male Vowels)")
+```
+
+Each circle plot shows the inverse roots of the AR and MA components for the selected ARMA model. The AR roots and MA roots should lie outside the unit circle for a causual and invertible model.
+
+Female (ARMA(2,4)): We see several points near or somewhat close to the boundary of the circle. This suggests the stationarity and invertibility of the model. 
+Male (ARMA(2,1)): Fewer total points (because of lower MA order), and they appear to lie well within the unit circle, which indicating a non-invertible fit.
+
+### Forecasting the Future
+
+```{r forecast-vowe, echo = F, warning = F, message = F}
+h <- 40
+future_trend_female_vowel <- forecast(lm_trend_female_vowel, h = h)
+future_trend_male_vowel <- forecast(lm_trend_male_vowel, h = h)
+
+plot_df_forecast_vowel <- bind_rows(
+  data.frame(year = seq(min(vowel_female$year), max(vowel_female$year) + h, by = 1), orig = c(as.numeric(ts_female_vowel), rep(NA, h)), forecasted = c(rep(NA, length(ts_female_vowel)), future_trend_female_vowel$mean), sex = "Female"),
+  data.frame(year = seq(min(vowel_male$year), max(vowel_male$year) + h, by = 1), orig = c(as.numeric(ts_male_vowel), rep(NA, h)), forecasted = c(rep(NA, length(ts_male_vowel)), future_trend_male_vowel$mean), sex = "Male")
+)
+
+ggplot(plot_df_forecast_vowel, aes(x = year, y = orig, color = sex)) +
+  geom_line() +
+  geom_line(aes(y = forecasted), linetype = "dotted") +
+  labs(x = "Year", y = "Average Number of Vowels") +
+  ggtitle("Observed Average Vowel vs. Forecast")
+```
+
+Both female and male curves show an upward trend in the forecast region, suggesting that vowel usage might continue to increase. The magnitude of the increase is driven by the shape of the quadratic trend fit and the persistence of the ARMA residual patterns.
+
+
 ## Average Longest Run of Consonants 
 
 We will fit a model for females and males separately. Looking at the graphs, the time series for the average longest consonant run for female names appears to have a non-linear trend. As a result, we start by fitting a quadratic polynomial to the female name data to de-trend it. The graph below shows the original female name data versus the fitted values (dotted line) from the cubic polynomial: 
