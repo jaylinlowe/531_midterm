@@ -1,0 +1,124 @@
+---
+title: "Spectral Analyse for consonant and vowel"
+author: "Jaylin Lowe, Xinhe Wu, and Yiheng Xiang"
+date: "2025-02-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(stringr)
+library(babynames)    
+library(ggplot2)      
+library(forecast)     
+library(tseries)    
+library(gridExtra)
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, echo=F, message=FALSE}
+vowel_run_df <- babynames %>%
+  mutate(num_vowels = str_count(name, '[aeoiuAEOIU]')) %>%
+  mutate(num_vowels_people = num_vowels * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_num = sum(num_vowels_people)/sum(n))
+
+# Separate data for males and females
+vowel_female <- filter(vowel_run_df, sex == "F")
+vowel_male <- filter(vowel_run_df, sex == "M")
+
+# Create time series for both genders
+ts_female_vowel <- ts(vowel_female$avg_num, start = min(vowel_female$year), frequency = 1)
+ts_male_vowel <- ts(vowel_male$avg_num, start = min(vowel_male$year), frequency = 1)
+
+# Fit quadratic trends
+lm_trend_female_vowel <- tslm(ts_female_vowel ~ trend + I(trend^2))
+lm_trend_male_vowel <- tslm(ts_male_vowel ~ trend + I(trend^2))
+resid_female_vowel <- residuals(lm_trend_female_vowel)
+resid_male_vowel <- residuals(lm_trend_male_vowel)
+female_spec_smooth <- spectrum(resid_female_vowel,
+         spans = c(3,3), 
+         main  = "Female Residuals: Smoothed Spectrum",
+         xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of female: ",female_spec_smooth$freq[ which.max(female_spec_smooth$spec) ],"\n")
+
+
+female_spec_aic = spectrum(resid_female_vowel, method="ar", main="Spectrum of Female Residuals estimated via AR model picked by AIC",xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of female using AIC: ",female_spec_aic$freq[which.max(female_spec_aic$spec)],"\n")
+
+male_spec_smooth <- spectrum(resid_male_vowel,
+         spans = c(3,3), 
+         main  = "Male Residuals: Smoothed Spectrum",
+         xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of male: ",male_spec_smooth$freq[ which.max(male_spec_smooth$spec) ],"\n")
+male_spec_aic = spectrum(resid_male_vowel, method="ar", main="Spectrum of Male Residuals estimated via AR model picked by AIC",xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of male using AIC: ",male_spec_aic$freq[which.max(male_spec_aic$spec)],"\n")
+```
+
+
+The highest frequency in the smoothed female and male residuals are both 0.01389, indicating that there is period $T=1/\omega\approx72$ years. However, we only have total record of 138 years, which means in such a super long cycle of 72 years, we can only see at most less than two complete 'ups and downs'. Therefore, it is very difficult to reliably verify it.
+
+And inspired by a previous project[1], when we use AIC to select the best estimators, the peak frequency are both 0 in male and female residuals, leading to an infinite period. Consequently, there are no periodic behavior in both male and female residuals.
+
+```{r, echo=FALSE, message=FALSE}
+length_df2 <- babynames %>%
+  mutate(name_length = str_length(name)) %>%
+  mutate(name_length_people = name_length * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_length = sum(name_length_people)/sum(n)) 
+
+longest_run <- rep(NA, nrow(babynames))
+for (i in 1:nrow(babynames)) {
+  name <- babynames$name[i]
+  longest_run[i] <- max(sapply(str_split(name, "[!aeiouAEIOU]")[[1]], nchar))
+}
+
+consonant_run_df <- babynames %>%
+  mutate(longest_run = longest_run) %>%
+  group_by(year, sex) %>%
+  summarize(weighted_longest_run = sum(n * longest_run)/sum(n)) 
+
+consonant_female <- filter(consonant_run_df, sex == "F")
+
+ts_female <- ts(consonant_female$weighted_longest_run,
+                start = min(consonant_female$year), 
+                end   = max(consonant_female$year),
+                frequency = 1)
+
+consonant_male <- filter(consonant_run_df, sex == "M")
+
+ts_male <- ts(consonant_male$weighted_longest_run,
+                start = min(consonant_male$year), 
+                end   = max(consonant_male$year),
+                frequency = 1)
+
+lm_trend_male <- tslm(ts_male ~ trend+I(trend^2) + I(trend^3))
+lm_trend_female <- tslm(ts_female ~ trend+I(trend^2) + I(trend^3))
+resid_male <- residuals(lm_trend_male)
+resid_female <- residuals(lm_trend_female)
+
+female_spec_smooth <- spectrum(resid_female,
+         spans = c(3,3), 
+         main  = "Female Residuals: Smoothed Spectrum",
+         xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of female: ",female_spec_smooth$freq[ which.max(female_spec_smooth$spec) ],"\n")
+
+
+female_spec_aic = spectrum(resid_female, method="ar", main="Spectrum of Female Residuals estimated via AR model picked by AIC",xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of female using AIC: ",female_spec_aic$freq[which.max(female_spec_aic$spec)],"\n")
+
+male_spec_smooth <- spectrum(resid_male,
+         spans = c(3,3), 
+         main  = "Male Residuals: Smoothed Spectrum",
+         xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of male: ",male_spec_smooth$freq[ which.max(male_spec_smooth$spec) ],"\n")
+male_spec_aic = spectrum(resid_male, method="ar", main="Spectrum of Male Residuals estimated via AR model picked by AIC",xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of male using AIC: ",male_spec_aic$freq[which.max(male_spec_aic$spec)],"\n")
+```    
+
+For female data, the smoothed approach found a mild multi-decade "peak"($T=1/\omega\approx48$ years) but the parametric AR approach concluded the main power is still near frequency 0. This discrepancy often happens when the “peak” in the smoothed periodogram is subtle, possibly mixing with leftover trend or only covering 2-3 data cycles in the entire 138-year history. The AR method lumps that into a broad low-frequency band (peak at 0).Therefore, we consider the female data as no cycle.
+
+For male data, both methods point to a multi-decade cycle ($T=1/\omega\approx28$ years) for male data. This is a more consistent result, suggesting there might be a real moderate‐period fluctuation in the male longest‐consonant‐run measure.
+
+
+
