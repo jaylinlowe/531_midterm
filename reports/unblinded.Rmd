@@ -149,7 +149,7 @@ Calculating these values and plotting them required some additional sources, inc
 
 ## Average Longest Run of Consonants 
 
-We will fit a model for females and males separately. Looking at the graphs, the time series for the average longest consonant run for female names appears to have a non-linear trend. As a result, we start by fitting a quadratic polynomial to the female name data to de-trend it. The graph below shows the original female name data versus the fitted values (dotted line) from the quadratic polynomial: 
+We will fit a model for females and males separately. Looking at the graphs, the time series for the average longest consonant run for female names appears to have a non-linear trend. As a result, we start by fitting a quadratic polynomial to the female name data to de-trend it. The graph below shows the original female name data versus the fitted values (dotted line) from the cubic polynomial: 
 
 ```{r, echo = F}
 consonant_female <- filter(consonant_run_df, sex == "F")
@@ -163,8 +163,10 @@ lm_trend_female <- tslm(ts_female ~ trend+I(trend^2) + I(trend^3))
 
 plot_df <- data.frame(year = seq(1880, 2017, by = 1), orig = c(ts_female), fitted = c(fitted(lm_trend_female)))
 
-ggplot(plot_df) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = fitted, x = year), color = "black", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Fitted Quadratic Values")
+ggplot(plot_df) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = fitted, x = year), color = "black", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Fitted Cubic Values")
 ```
+
+
 
 Now, we fit an $ARMA(p,q)$ model to the residuals created from the quadratic polynomial. To choose $p$ and $q$, we consider $p \in (0,5)$ and $q \in (0,5)$ and calculate the AIC for each resulting model. We use a modified version of the code shown in class [@notes531] that inserts a `NA` value for any $p,q$ combinations that produce errors or warnings. Note that we are using `arima2` [@arima2] to help avoid optimization issues. Essentially, we are fitting:
 
