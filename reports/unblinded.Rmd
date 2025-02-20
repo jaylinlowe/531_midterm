@@ -166,7 +166,13 @@ plot_df <- data.frame(year = seq(1880, 2017, by = 1), orig = c(ts_female), fitte
 ggplot(plot_df) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = fitted, x = year), color = "black", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Fitted Cubic Values")
 ```
 
+Next, we can plot the ACF of the residuals: 
 
+```{r}
+resid_female <- residuals(lm_trend_female)
+acf(resid_female, main  = "Female: ACF of Residuals")
+```
+This appears to exhibit some seasonality. However, since our data is annual data and not monthly or quarterly, we thought fitting a SARMA model would be an poor choice. There is no reason for naming patterns to exhibit seasonality. 
 
 Now, we fit an $ARMA(p,q)$ model to the residuals created from the quadratic polynomial. To choose $p$ and $q$, we consider $p \in (0,5)$ and $q \in (0,5)$ and calculate the AIC for each resulting model. We use a modified version of the code shown in class [@notes531] that inserts a `NA` value for any $p,q$ combinations that produce errors or warnings. Note that we are using `arima2` [@arima2] to help avoid optimization issues. Essentially, we are fitting:
 
@@ -177,7 +183,6 @@ $\alpha$, $beta_1$, and $\beta_2$ are obtained from the regression model and are
 
 ```{r, cache = T, echo = F, warning = F, message = F, include = F}
 set.seed(49282)
-resid_female <- residuals(lm_trend_female)
 detrend_female <- aic_table(resid_female, P = 5, Q = 5, D = 0)
 ```
 
@@ -303,14 +308,15 @@ Ultimately, both of our analyses for the average maximum consonant run indicate 
 Despite having data from 1880 to 2017, we likely needed more data points. We suspect that cycles of naming behavior may be very, very long as naming patterns change slowly. It might have also been useful to see if additional covariates, such as other data points on linguistic behaviors and demographics of babies being born, would have helped us build a better model. 
 
 # Scholarship 
-We chose a very different subject for our project than previous projects. Many past projects focused on economic or environmental data. We took a different route and chose to look at a more socially-motivated time series. This may have contributed to some of our difficulties, as data occurring naturally in the environment or in financial markets generally follows more understandable patterns. It also might change more rapidly, where changes in naming patterns occur very slowly. 
+We chose a very different subject for our project than previous projects. Many past projects focused on economic or environmental data. We took a different route and chose to look at a more socially-motivated time series. This may have contributed to some of our difficulties, as data occurring naturally in the environment or in financial markets generally follows more understandable patterns. It also might change more rapidly, where changes in naming patterns occur very slowly. We also chose to look at multiple related time series rather than a single one. Our goal in doing so was to address the "complexity" of names without having to choose a single definition for "complexity". We also thought it would be interesting to compare the results of the different time series. In this sense, our project approaches our research question in a different way than most of the previous ones that set out to answer a single question about a single time series. While we believe our choice led to a more interesting project, it did mean that we had less time to devote to model fitting and diagnostics. 
 
+Like many of the past projects, we primarily used ARMA models and looked at `AIC` tables to determine the best model. We got the idea to look at the invertibility of the roots visually using the plot functionality available in `arima` and `arima2` from one of the past projects [@bitcoin]. Unlike many of the projects, we fit a polynomial trend to detrend our data before using ARMA methods. We observed this in one other project [@energy], and found one other that used LOESS smoothing [@fires], but it did not seem to be a common choice. However, for our data it was necessary. We also did some forecasting, which did not appear in many of the past projects. Ultimately, this was not very useful. We suspect that our dataset does not extrapolate well, but it was interesting to see what it predicted. 
 
-
+Futhermore, we used `arima2` for some of our models where most midterm projects in the past just used `arima`. This likely did not matter in our analysis, but is a useful example of how `arima2` can be used successfully and fairly seamlessly in time series analysis. We did have to use `arima` models for the forecasting but we used `arima2` for the modeling process of the longest consonant run time series. Other than the forecasting, there were no points where `arima2` was more difficult to use than `arima`, and we may have avoided optimization issues. 
 
 # Contributions 
 
-Jaylin came up with the idea to use the `babynames` data set, found the article that inspired our idea to look at average length and average number of vowels, and came up with the idea to took at the longest number of consonants in a row. She wrote the code to create the six time series we looked at. She wrote the introduction, the exploratory data analysis section, and the section on the average longest run of consonants. She also set up the bibliography. 
+Jaylin came up with the idea to use the `babynames` data set, found the article that inspired our idea to look at average length and average number of vowels, and came up with the idea to took at the longest number of consonants in a row. She wrote the code to create the six time series we looked at. She wrote the introduction, the exploratory data analysis section, the scholarship section and the section on the average longest run of consonants. She also set up the bibliography. 
 
 
 **<big>References</big>**.
