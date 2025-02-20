@@ -209,9 +209,9 @@ fc_resid <- forecast(female_final, h = h)
 
 fc_combined <- future_trend$mean + fc_resid$mean
 
-plot_df2 <- data.frame(year = seq(1880, 2017+h, by = 1), orig = c(ts_female, rep(NA, h)), fitted = c(fitted(lm_trend_female), rep(NA,h)), forecasted = c(rep(NA, 138), fc_combined))
+plot_df2 <- data.frame(year = seq(1880, 2017+h, by = 1), orig = c(ts_female, rep(NA, h)), fitted = c(fitted(lm_trend_female) + fitted(female_final), rep(NA,h)), forecasted = c(rep(NA, 138), fc_combined))
 
-ggplot(plot_df2) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = forecasted, x = year), color = "red", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Forecast") 
+ggplot(plot_df2) + geom_line(aes(y = orig, x = year), color = "purple2") + geom_line(aes(y = fitted, x = year), color = "black", linetype = "dotted") + geom_line(aes(y = forecasted, x = year), color = "red", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Female: Observed Max Consonant Run vs. Forecast") 
 ```
 
 The 20 year forecast shows a dramatic decrease in the average longest consonant run of female baby names. This is likely because our model is unable to extrapolate well, which is not surprising. 
@@ -275,7 +275,7 @@ This includes many MA and AR roots right on the border, so this is probably not 
 plot(arima2::arima(resid_male, order = c(4, 0, 0))) + ggtitle("Inverse Roots For ARMA(4,0) Model")
 ```
 
-This looks much better, so we choose ARMA(4,0) fit to the residuals of a cubic polynomial as our best model. 
+This looks much better, so we choose ARMA(4,0) fit to the residuals of a cubic polynomial as our best model. The plot below shoes the original data (in teal) with the fitted values (dotted black) and a forecast for the next 20 years (dotted red). 
 
 ```{r, echo = F, warning = F, message = F}
 male_final <- stats::arima(resid_male, order = c(4, 0, 0))
@@ -287,9 +287,9 @@ fc_resid <- forecast(male_final, h = h)
 
 fc_combined <- future_trend$mean + fc_resid$mean
 
-plot_df2 <- data.frame(year = seq(1880, 2017+h, by = 1), orig = c(ts_male, rep(NA, h)), fitted = c(fitted(lm_trend_male), rep(NA,h)), forecasted = c(rep(NA, 138), fc_combined))
+plot_df2 <- data.frame(year = seq(1880, 2017+h, by = 1), orig = c(ts_male, rep(NA, h)), fitted = c(fitted(male_final) + fitted(lm_trend_male), rep(NA,h)), forecasted = c(rep(NA, 138), fc_combined))
 
-ggplot(plot_df2) + geom_line(aes(y = orig, x = year), color = "mediumaquamarine") + geom_line(aes(y = forecasted, x = year), color = "red", linetype = "dotted") + labs(x = "Year", y = "Number of Consonants") + ggtitle("Male: Observed Max Consonant Run vs. Forecast") 
+ggplot(plot_df2) + geom_line(aes(y = orig, x = year), color = "mediumaquamarine") + geom_line(aes(y = fitted, x = year), color = "black", linetype = "dotted")+ geom_line(aes(y = forecasted, x = year), color = "red", linetype = "dotted") +  labs(x = "Year", y = "Number of Consonants") + ggtitle("Male: Observed Max Consonant Run vs. Forecast") 
 ```
 
 Like the forecasting for the female names, these predict that the average longest number of consonants in a row will continue to decrease. This is likely because of the cubic fit to the data indicates a decrease. In general, forecasting the average longest number of consonants is likely not a reliable thing to forecast. We include these forecasts for exploratory purposes, but caution that they should not be considered accurate. 
@@ -303,7 +303,10 @@ Ultimately, both of our analyses for the average maximum consonant run indicate 
 Despite having data from 1880 to 2017, we likely needed more data points. We suspect that cycles of naming behavior may be very, very long as naming patterns change slowly. It might have also been useful to see if additional covariates, such as other data points on linguistic behaviors and demographics of babies being born, would have helped us build a better model. 
 
 # Scholarship 
-Put our project in context of others? 
+We chose a very different subject for our project than previous projects. Many past projects focused on economic or environmental data. We took a different route and chose to look at a more socially-motivated time series. This may have contributed to some of our difficulties, as data occurring naturally in the environment or in financial markets generally follows more understandable patterns. It also might change more rapidly, where changes in naming patterns occur very slowly. 
+
+
+
 
 # Contributions 
 
