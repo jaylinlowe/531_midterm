@@ -59,9 +59,9 @@ aic_table <- function(data, P, Q, D = 0, xreg = NULL) {
 
 # Introduction
 
-Every year, names US parents choose for their children seem to get more unusual and more complex. The decision of what to name your baby has become so complex that some people choose to hire naming consultants to help them find unique names [@nyt]. However, this phenomenon is mostly ancedotal and may be influenced by the number of celebrities choosing extremely unusual and complicated names for this children. In this project, we set out to explore how the complexity of US baby names has changed over time. Are names actually becoming more complex? 
+Every year, names US parents choose for their children seem to get more unusual and more complex. The decision of what to name your baby has become so complex that some people choose to hire naming consultants to help them find unique names [@nyt]. However, this phenomenon is mostly ancedotal and may be influenced by the number of celebrities choosing extremely unusual and complicated names for this children. In this project, we set out to explore how the complexity of US baby names has changed over time. Are names actually becoming more complex? Are we able to model how aspects of names change over time? 
 
-To answer this question, we created three different time series, separated by gender, using data from the US Social Security Administration on first names given to babies born between 1880 and 2017 [@babynames]. Names given to fewer than five babies of the same gender in the same year are excluded; all others are included. As a result, we cannot observe trends in extremely unusual names; however, we can still observe general naming trends. The dataset gives us the number of babies given a particular name, divided by gender and year. 
+To answer these questions, we created three different time series, separated by gender, using data from the US Social Security Administration on first names given to babies born between 1880 and 2017 [@babynames]. Names given to fewer than five babies of the same gender in the same year are excluded; all others are included. As a result, we cannot observe trends in extremely unusual names; however, we can still observe general naming trends. The dataset gives us the number of babies given a particular name, divided by gender and year. 
 
 For each year and sex, we calculated three values aimed at capturing the complexity of names. These three were: the average length of a name, the average number of vowels in a name, and the average longest run of consonants in a name. These were weighted by how popular a name was. In other words, the denominator for these averages was the number of people born that year, not the number of unique names given. Popular names will be given more weight than unusual names. The first two values are fairly self-explanatory, but the third may benefit from an example. For each name, we calculated the longest run of consonants in a name. For example, the name "Isabella" has a longest consonant run of 2, from the "ll" part. The names "Ava" and "Astrid" would have a longest consonant run of 1 and 3, respectively. 
 
@@ -296,12 +296,19 @@ Like the forecasting for the female names, these predict that the average longes
 
 Ultimately, both of our analyses for the average maximum consonant run indicate a single peak occurring around the 1970s. We suspect the current downward trend will have to plateau or turn around eventually, but do not have data to back this up. In particular, we suspect that trends around the number of consonants occurring in a row might have a cyclical pattern not observable in the data set we have. There do not appear to be cycles of smaller frequencies. 
 
-# Conclusion? Discussion? 
+# Discussion
 
-# Contributions 
+
+## Limitations
+Despite having data from 1880 to 2017, we likely needed more data points. We suspect that cycles of naming behavior may be very, very long as naming patterns change slowly. It might have also been useful to see if additional covariates, such as other data points on linguistic behaviors and demographics of babies being born, would have helped us build a better model. 
 
 # Scholarship 
 Put our project in context of others? 
+
+# Contributions 
+
+Jaylin came up with the idea to use the `babynames` data set, found the article that inspired our idea to look at average length and average number of vowels, and came up with the idea to took at the longest number of consonants in a row. She wrote the code to create the six time series we looked at. She wrote the introduction, the exploratory data analysis section, and the section on the average longest run of consonants. She also set up the bibliography. 
+
 
 **<big>References</big>**.
 
