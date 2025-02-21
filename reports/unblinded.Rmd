@@ -666,7 +666,8 @@ Like the forecasting for the female names, these predict that the average longes
 Ultimately, both of our analyses for the average maximum consonant run indicate a single peak occurring around the 1970s. We suspect the current downward trend will have to plateau or turn around eventually, but do not have data to back this up. In particular, we suspect that trends around the number of consonants occurring in a row might have a cyclical pattern not observable in the data set we have. There do not appear to be cycles of smaller frequencies. 
 
 # Discussion
-Our study of US baby names over 138 years reveals notable trends in naming complexity, with increases in both average name length and vowel count, suggesting a shift toward more elaborate names, while the longest consonant run exhibits a peak around the 1970s before declining. Using polynomial trends and ARMA modeling, we found that name length trends are best captured with quadratic (for females) and linear (for males) models, while vowel counts display a broad “U-shaped” pattern with no strong cyclical component. In contrast, the longest consonant run metric showed moderate evidence of a 28-year cycle for male names but remained inconclusive for female names. Spectral analysis confirmed that most fluctuations were dominated by long-term trends rather than periodic behavior. Forecasting results indicated continued increases in name length and vowel usage, but a sharp projected decline in consonant sequences, raising concerns about the reliability of extrapolating cultural patterns from historical data. These findings suggest that naming complexity evolves in different ways across various linguistic dimensions, potentially influenced by cultural and phonetic preferences. Despite the insights gained, our study is limited by the dataset’s historical scope and the challenges of modeling sociolinguistic trends. Future research could incorporate demographic and linguistic factors to refine predictive models, exploring how societal influences shape naming conventions over time.
+
+
 ## Limitations
 Despite having data from 1880 to 2017, we likely needed more data points. We suspect that cycles of naming behavior may be very, very long as naming patterns change slowly. It might have also been useful to see if additional covariates, such as other data points on linguistic behaviors and demographics of babies being born, would have helped us build a better model. 
 
@@ -683,6 +684,7 @@ Jaylin came up with the idea to use the `babynames` data set, found the article 
 
 Xinhe worked on the average vowels section, adding both the code and explanations. She also contributed to the discussion section.
 
+Yiheng Xiang wrote the average length of babynames section and came up with the idea that we can use spectral analysis to investigate the cycles in the three models.
 
 **<big>References</big>**.
 
