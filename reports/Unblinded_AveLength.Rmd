@@ -1,0 +1,278 @@
+---
+title: "Unblinded_AveLength"
+author: "Jaylin Lowe, Xinhe Wu, and Yiheng Xiang"
+date: "2025-02-20"
+bibliography: unblinded.bib
+csl: apa-numeric-superscript-brackets.csl
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(stringr)
+library(babynames)    
+library(ggplot2)      
+library(forecast)     
+library(tseries)    
+library(gridExtra)
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Average Name Length
+
+We will fit the model for both male and female together, as there is not a significant difference between them from the plot. Considering their non-linear trend, we first fit them with a quadratic trend to de-trend it. 
+```{r loaddata,echo=FALSE,warning=FALSE,message=FALSE}
+length_df2 <- babynames %>%
+  mutate(name_length = str_length(name)) %>%
+  mutate(name_length_people = name_length * n) %>%
+  group_by(year, sex) %>%
+  summarize(avg_length = sum(name_length_people)/sum(n), .groups    = "drop") 
+
+ggplot(length_df2, aes(x = year, y = avg_length, color = sex)) + geom_line()
+```
+
+```{r split-data&timeseries,echo=FALSE,warning=FALSE,message=FALSE}
+length_female <- length_df2 %>% filter(sex == "F") %>% arrange(year)
+length_male   <- length_df2 %>% filter(sex == "M") %>% arrange(year)
+# Convert to time-series objects 
+ts_female <- ts(length_female$avg_length, 
+                start = min(length_female$year), 
+                end   = max(length_female$year),
+                frequency = 1)
+
+ts_male <- ts(length_male$avg_length,
+              start = min(length_male$year),
+              end   = max(length_male$year),
+              frequency = 1)
+```
+
+The graph below shows the original female and male name data versus the fitted values (dotted line) from the quadratic polynomial:
+
+```{r fit_quadratictrend,echo=FALSE,warning=FALSE,message=FALSE}
+# Fit a non-linear trend model
+lm_trend_female <- tslm(ts_female ~ trend+I(trend^2))
+summary(lm_trend_female)
+
+lm_trend_male <- tslm(ts_male ~ trend+I(trend^2))
+summary(lm_trend_male)
+
+plot_df_length <- bind_rows(
+  data.frame(year = length_female$year, orig = as.numeric(ts_female), fitted = as.numeric(fitted(lm_trend_female)), sex = "Female"),
+  data.frame(year = length_male$year, orig = as.numeric(ts_male), fitted = as.numeric(fitted(lm_trend_male)), sex = "Male")
+)
+
+ggplot(plot_df_length, aes(x = year, y = orig, color = sex)) +
+  geom_line() +
+  geom_line(aes(y = fitted), linetype = "dotted") +
+  labs(x = "Year", y = "Average Number of Vowels") +
+  ggtitle("Observed Average Length vs. Fitted Quadratic Values")
+```
+
+Since the p‐value for the I(trend^2) term is below 0.05 in the female trend model, we retain the quadratic term. In contrast, for the male data, the p‐value for I(trend^2) exceeds 0.05, so we discard the quadratic term, keep only the linear term, and refit the model.
+
+```{r fit_lineartrend,echo=FALSE,warning=FALSE,message=FALSE}
+lm_trend_male <- tslm(ts_male ~ trend)
+summary(lm_trend_male)
+plot_df_length <- bind_rows(
+  data.frame(year = length_female$year, orig = as.numeric(ts_female), fitted = as.numeric(fitted(lm_trend_female)), sex = "Female"),
+  data.frame(year = length_male$year, orig = as.numeric(ts_male), fitted = as.numeric(fitted(lm_trend_male)), sex = "Male")
+)
+
+ggplot(plot_df_length, aes(x = year, y = orig, color = sex)) +
+  geom_line() +
+  geom_line(aes(y = fitted), linetype = "dotted") +
+  labs(x = "Year", y = "Average Number of Vowels") +
+  ggtitle("Observed Average Length vs. Fitted Values")
+```
+
+Next, we will perform a spectral analysis on the residues of male and female.
+
+```{r spectralanalyse,echo=FALSE,warning=FALSE,message=FALSE}
+resid_female <- residuals(lm_trend_female)
+resid_male <- residuals(lm_trend_male)
+
+
+female_spec_smooth <- spectrum(resid_female,
+         spans = c(3,3), 
+         main  = "Female Residuals: Smoothed Spectrum",
+         xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of female: ",female_spec_smooth$freq[ which.max(female_spec_smooth$spec) ],"\n")
+
+
+female_spec_aic = spectrum(resid_female, method="ar", main="Spectrum of Female Residuals estimated via AR model picked by AIC",xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of female using AIC: ",female_spec_aic$freq[which.max(female_spec_aic$spec)],"\n")
+
+male_spec_smooth <- spectrum(resid_male,
+         spans = c(3,3), 
+         main  = "Male Residuals: Smoothed Spectrum",
+         xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of male: ",male_spec_smooth$freq[ which.max(male_spec_smooth$spec) ],"\n")
+male_spec_aic = spectrum(resid_male, method="ar", main="Spectrum of Male Residuals estimated via AR model picked by AIC",xlab  = "Frequency", ylab = "Spectral Density")
+cat("The peak frequency of male using AIC: ",male_spec_aic$freq[which.max(male_spec_aic$spec)],"\n")
+```
+
+The highest frequency in the smoothed female and male residuals are both 0.01389, indicating that there is period $T=1/\omega\approx72$ years. However, we only have total record of 138 years, which means in such a super long cycle of 72 years, we can only see at most less than two complete 'ups and downs'. Therefore, it is very difficult to reliably verify it.
+
+And inspired by a previous project [@24project2], when we use AIC to select the best estimators, the peak frequency are both 0 in male and female residuals, leading to an infinite period. Consequently, there are no periodic behavior in both male and female residuals.
+
+We next fit \(ARMA(p,q)\) models to the residuals from each trend model—*quadratic* for female and *linear* for male. For each case, we consider \(p \in \{0,\dots,5\}\) and \(q \in \{0,\dots,5\}\), and then calculate the AIC of every fitted model. As shown in the class [@notes531], we insert `NA` if certain \((p,q)\) pairs fail to converge or emit warnings. We use `arima2` [@arima2] to help avoid optimization pitfalls.
+
+#### Female Residuals (Quadratic Trend)
+
+The polynomial is
+\[
+Y_n \;=\;\alpha \;+\;\beta_1\,X_n \;+\;\beta_2\,X_n^2 \;+\;\varepsilon_n,
+\]
+where we estimated
+\(\alpha = 5.353,\; \beta_1 = 0.01079,\; \beta_2 = -3.322\times 10^{-5}\).
+Here, \(\varepsilon_n\) is modeled by a Gaussian \(ARMA(p,q)\). The AIC values from a grid of \((p,q)\) reveal which ARMA specification best fits the **female** residuals.
+
+#### Male Residuals (Linear Trend)
+
+In contrast, for the **male** series we use a simpler model,
+\[
+Y_n \;=\;\alpha \;+\;\beta_1\,X_n \;+\;\varepsilon_n,
+\]
+with \(\alpha=5.5509\) and \(\beta_1=0.0026868\). Again, \(\varepsilon_n\) follows an \(ARMA(p,q)\). We search over the same grid of \(p,q\) and record AIC values, then select the \((p,q)\) combination yielding the minimum AIC for the male residuals.
+
+Below, we present the AIC tables for both **female** and **male** residuals. From these, we pick the ARMA model (i.e., the \((p,q)\) pair) with the lowest AIC in each case, and proceed with further analysis or diagnostics accordingly.
+ 
+
+```{r fit_arma,cache=T, echo=FALSE,warning=FALSE,message=FALSE}
+#code borrowed from slides, modified with try-catch 
+aic_table <- function(data, P, Q, D = 0, xreg = NULL) {
+  table <- matrix(NA, (P+1), (Q + 1)) 
+  for (p in 0:P) {
+    for (q in 0:Q) {
+      
+      if (is.null(xreg)) {
+        table[p+1, q+1] <- tryCatch({arima2::arima(data, order = c(p, D, q))$aic},
+        error = function(e){
+          print(c(p,q))
+          print(e) 
+          NA},
+        warning = function(w) {
+          print(c(p,q))
+          print(w)
+          NA
+        })
+      }
+      else{
+        table[p+1, q+1] <- tryCatch({arima2::arima(data, order = c(p, D, q), xreg = xreg, max_iters = 500)$aic},
+        error = function(e){
+          print(c(p,q))
+          print(e) 
+          NA},
+        warning = function(w) {
+          print(c(p,q))
+          print(w)
+          NA
+        })
+      }
+    }
+  }
+  dimnames(table) <- list(paste("AR", 0:P, sep = ""),
+                          paste("MA", 0:Q, sep = ""))
+  return(table)
+}
+
+# Extract residuals from the quadratic and linear model
+detrend_female <- aic_table(resid_female, P = 5, Q = 5, D = 0)
+detrend_male <- aic_table(resid_male, P = 5, Q = 5, D = 0)
+
+knitr::kable(detrend_female, caption = "AIC Table for Detrended Female Ave Length Run Data")
+knitr::kable(detrend_male, caption = "AIC Table for Detrended Male Ave Length Run Data")
+```
+
+We are going to avoid $p+q\geq5$ situations (in case of overfitting), and thus take $\text{ARMA}(2,2)$ model (AIC: -841.4369) for female residuals and $\text{ARMA}(3,1)$ model (AIC: -851.7415) for male residuals from the above result.
+
+
+```{r plot-inverse-roots, echo = F}
+final_female <- stats::arima(resid_female, order = c(2, 0, 2))
+final_male <- stats::arima(resid_male, order = c(3, 0, 1))
+
+autoplot(final_female) + ggtitle("Inverse Roots For ARMA(2,2) Model (Female Ave length)")
+autoplot(final_male) + ggtitle("Inverse Roots For ARMA(3,1) Model (Male Ave length)")
+```
+
+After we check the plot of inverse roots, we find that for the female model, all the points are inside the boundary of the unit circle (although some points are close to the boundary, we still consider it within the circle), but for the male model, some of the roots are on the border of the unit circle. And this is also true for the $\text{ARMA}(2,2)$ model.
+
+```{r plot-inverse-roots_22, echo = F}
+final_male <- stats::arima(resid_male, order = c(2, 0, 2))
+autoplot(final_male) + ggtitle("Inverse Roots For ARMA(2,2) Model (Male Ave length)")
+```
+
+Therefore, we finally decide to take $\text{ARMA}(4,0)$ model (AIC: -847.2840) for the male residuals, since all the points are inside the boundary of the unit circle.
+
+```{r plot-inverse-roots_40, echo = F}
+final_male <- stats::arima(resid_male, order = c(4, 0, 0))
+autoplot(final_male) + ggtitle("Inverse Roots For ARMA(4,0) Model (Male Ave length)")
+```
+
+And the $\text{ARMA}(2,2)$ model for female residuals, the $\text{ARMA}(4,0)$ model for male residuals are both consistent with the ```auto.arima``` function from the ```forcast``` package [@forecast]. Consequently, we decide to take these two models as our final models for the male and female residuals.
+
+```{r autoarima, echo=FALSE}
+fit_arma_female <- auto.arima(resid_female,
+                              seasonal=FALSE,  
+                              stepwise=TRUE, approximation=FALSE)
+summary(fit_arma_female)
+fit_arma_male <- auto.arima(resid_male,
+                              seasonal=FALSE,  
+                              stepwise=TRUE, approximation=FALSE)
+summary(fit_arma_male)
+```
+
+Next, we plot the forecasted values for the next 20 years:
+
+```{r forecast-length, echo = F, warning = F, message = F}
+h <- 20
+female_final <- stats::arima(resid_female, order = c(2, 0, 2))
+male_final <- stats::arima(resid_male, order = c(4, 0, 0))
+future_trend_female <- forecast(lm_trend_female, h = h)
+future_trend_male <- forecast(lm_trend_male, h = h)
+fc_resid_female <- forecast(female_final, h = h)
+fc_resid_male <- forecast(male_final, h = h)
+fc_combined_female <- future_trend_female$mean + fc_resid_female$mean
+fc_combined_male <- future_trend_male$mean + fc_resid_male$mean
+plot_df_forecast <- bind_rows(
+  data.frame(year = seq(min(length_female$year), max(length_female$year) + h, by = 1), orig = c(as.numeric(ts_female), rep(NA, h)), forecasted = c(rep(NA, length(ts_female)), fc_combined_female), sex = "Female"),
+  data.frame(year = seq(min(length_male$year), max(length_male$year) + h, by = 1), orig = c(as.numeric(ts_male), rep(NA, h)), forecasted = c(rep(NA, length(ts_male)), fc_combined_male), sex = "Male")
+)
+
+ggplot(plot_df_forecast, aes(x = year, y = orig, color = sex)) +
+  geom_line() +
+  geom_line(aes(y = forecasted), linetype = "dotted") +
+  labs(x = "Year", y = "Average Length of Names") +
+  ggtitle("Observed Average Length vs. Forecast")
+```
+
+From the plot, we can see that both male and female curves show a long-run rising tendency, short-term fluctuations, and a modest upward forecast beyond the last observed year.
+
+Finally, We will use the ```checkresiduals``` function to help us determine if we are overfitting the data or leaving out useful information is by checking the residuals.
+
+```{r diagnotics, echo=FALSE}
+checkresiduals(fit_arma_female)
+checkresiduals(fit_arma_male)
+```
+
+#### Female Residuals from $\text{ARMA}(2,2)$
+
+- The residuals fluctuate around zero without any visible trend or large shifts over time. No obvious clustering of positive or negative errors.
+- Nearly all autocorrelations fall within the $\pm2$ SE bounds (blue dashed lines), suggesting no strong leftover serial correlation.
+- The residual distribution appears roughly symmetric and bell‐shaped, indicating approximate normality.
+- Since p-value=0.591 in the Ljung-Box test [@ljungbox], we fail to reject the null of “no autocorrelation,” implying the residuals are effectively white noise.
+
+Therefore, the $\text{ARMA}(2,2)$ model for the female series exhibits no major signs of leftover structure in the residuals, and they appear approximately normal. This indicates a good fit.
+
+#### Male Residuals from $\text{ARMA}(4,0)$
+
+- Also mean‐reverting around zero, with no major pattern. Slightly more spiky at certain points, but nothing glaring.
+- Most lags are within the $\pm2$ SE bounds, though a couple of marginal lags exist. Still, no glaring sign of strong correlation.
+- The residual distribution is near-normal, perhaps slightly skewed in the tails, but not too severe.
+- Since p-value=0.0642 in the Ljung-Box test, we fail to reject the null of “no autocorrelation,” implying the residuals are effectively white noise.
+
+Therefore, the $\text{ARMA}(4,0)$ fit for the male series also has residuals that mostly behave like white noise, although the Ljung–Box test’s p‐value is a bit borderline (0.0642). Overall, it suggests adequate fit.
+
+
+
+
