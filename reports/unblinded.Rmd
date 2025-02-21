@@ -681,6 +681,8 @@ Futhermore, we used `arima2` for some of our models where most midterm projects 
 
 Jaylin came up with the idea to use the `babynames` data set, found the article that inspired our idea to look at average length and average number of vowels, and came up with the idea to took at the longest number of consonants in a row. She wrote the code to create the six time series we looked at. She wrote the introduction, the exploratory data analysis section, the scholarship section and the section on the average longest run of consonants. She also set up the bibliography. 
 
+Xinhe worked on the average vowels section, adding both the code and explanations. She also contributed to the discussion section.
+
 
 **<big>References</big>**.
 
